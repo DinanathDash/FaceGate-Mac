@@ -15,8 +15,8 @@ final class AppLocker: ObservableObject {
     /// Optional action to execute after unlocking (e.g. opening Settings)
     var onUnlockAction: (() -> Void)?
 
-    /// Active overlay panels (one per screen for multi-display).
-    private var overlayPanels: [AuthOverlayPanel] = []
+    /// Active overlay panels mapped by window IDs (or dummy IDs for fullscreen).
+    private var overlayPanels: [CGWindowID: AuthOverlayPanel] = [:]
 
     /// Timer used to poll for window creation when app is launching.
     private var windowDetectionTimer: Timer?
@@ -124,7 +124,7 @@ final class AppLocker: ObservableObject {
         windowDetectionTimer = nil
         windowAlignmentTimer?.invalidate()
         windowAlignmentTimer = nil
-        for panel in overlayPanels {
+        for panel in overlayPanels.values {
             panel.orderOut(nil)
         }
         overlayPanels.removeAll()
@@ -132,7 +132,7 @@ final class AppLocker: ObservableObject {
 
     /// Temporarily adjust the window level of the overlay (e.g. to show system prompts).
     func setOverlayWindowLevel(_ level: NSWindow.Level) {
-        for panel in overlayPanels {
+        for panel in overlayPanels.values {
             panel.level = level
         }
     }
@@ -147,9 +147,9 @@ final class AppLocker: ObservableObject {
         let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
 
         if overlayMode == 1, let app = blockedRunningApp {
-            let frames = getAppWindowFrames(for: app.processIdentifier)
-            if !frames.isEmpty {
-                for frame in frames {
+            let windows = getAppWindowFrames(for: app.processIdentifier)
+            if !windows.isEmpty {
+                for (windowID, frame) in windows {
                     let adjustedFrame = calculateOverlayFrame(from: convertQuartzToAppKit(rect: frame))
                     let panel = AuthOverlayPanel(
                         frame: adjustedFrame,
@@ -163,10 +163,10 @@ final class AppLocker: ObservableObject {
                         }
                     )
                     panel.orderFront(nil)
-                    overlayPanels.append(panel)
+                    overlayPanels[windowID] = panel
                 }
                 
-                if let first = overlayPanels.first {
+                if let first = overlayPanels.values.first {
                     first.makeKeyAndOrderFront(nil)
                 }
                 
@@ -182,25 +182,26 @@ final class AppLocker: ObservableObject {
             let mouseLocation = NSEvent.mouseLocation
             let activeScreen = screens.first { NSMouseInRect(mouseLocation, $0.frame, false) } ?? NSScreen.main ?? screens.first
 
-        for screen in screens {
-            let panel = AuthOverlayPanel(
-                screen: screen,
-                appName: appName,
-                bundleIdentifier: bundleIdentifier,
-                onAuthenticated: { [weak self] in
-                    self?.unlockCurrentApp()
-                },
-                onCancel: { [weak self] in
-                    self?.terminateBlockedApp()
+            for (index, screen) in screens.enumerated() {
+                let panel = AuthOverlayPanel(
+                    screen: screen,
+                    appName: appName,
+                    bundleIdentifier: bundleIdentifier,
+                    onAuthenticated: { [weak self] in
+                        self?.unlockCurrentApp()
+                    },
+                    onCancel: { [weak self] in
+                        self?.terminateBlockedApp()
+                    }
+                )
+                if screen == activeScreen {
+                    panel.makeKeyAndOrderFront(nil)
+                    panel.makeMain()
+                } else {
+                    panel.orderFront(nil)
                 }
-            )
-            if screen == activeScreen {
-                panel.makeKeyAndOrderFront(nil)
-                panel.makeMain()
-            } else {
-                panel.orderFront(nil)
+                overlayPanels[CGWindowID(1000 + index)] = panel
             }
-            overlayPanels.append(panel)
         }
 
         // Activate FaceGate so it becomes the active app and can receive keyboard input.
@@ -211,7 +212,7 @@ final class AppLocker: ObservableObject {
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
             if let activeScreen = activeScreen {
-                self.overlayPanels.first(where: { $0.screen == activeScreen })?.makeKeyAndOrderFront(nil)
+                self.overlayPanels.first(where: { $0.value.screen == activeScreen })?.value.makeKeyAndOrderFront(nil)
             }
         }
     }
@@ -232,10 +233,10 @@ final class AppLocker: ObservableObject {
     /// Called when the user Cmd+Tabs or clicks back to a locked app in App Window mode.
     func bringOverlaysToFront() {
         guard !overlayPanels.isEmpty else { return }
-        for panel in overlayPanels {
+        for panel in overlayPanels.values {
             panel.orderFront(nil)
         }
-        if let first = overlayPanels.first {
+        if let first = overlayPanels.values.first {
             first.makeKeyAndOrderFront(nil)
         }
         NSApp.activate(ignoringOtherApps: true)
@@ -243,14 +244,14 @@ final class AppLocker: ObservableObject {
 
     // MARK: - App Window Mode Helpers
 
-    /// Retrieve all onscreen window frames for a given process PID.
-    private func getAppWindowFrames(for pid: pid_t) -> [CGRect] {
+    /// Retrieve all onscreen window frames and IDs for a given process PID.
+    private func getAppWindowFrames(for pid: pid_t) -> [(CGWindowID, CGRect)] {
         let options = CGWindowListOption.optionAll
         guard let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             return []
         }
 
-        var frames: [CGRect] = []
+        var windows: [(CGWindowID, CGRect)] = []
         for window in windowList {
             guard let ownerPID = window[kCGWindowOwnerPID as String] as? pid_t,
                   ownerPID == pid else { continue }
@@ -259,15 +260,17 @@ final class AppLocker: ObservableObject {
             guard let layer = window[kCGWindowLayer as String] as? Int,
                   layer == 0 else { continue }
             
+            guard let windowID = window[kCGWindowNumber as String] as? CGWindowID else { continue }
+            
             if let boundsDict = window[kCGWindowBounds as String] as? NSDictionary,
                let rect = CGRect(dictionaryRepresentation: boundsDict as CFDictionary) {
                 // Ignore small accessory/dock/shadow/helper elements.
                 if rect.width > 120 && rect.height > 120 {
-                    frames.append(rect)
+                    windows.append((windowID, rect))
                 }
             }
         }
-        return frames
+        return windows
     }
 
     /// Convert Quartz (top-left origin) coordinates to AppKit (bottom-left origin) coordinates.
@@ -305,19 +308,23 @@ final class AppLocker: ObservableObject {
         windowAlignmentTimer?.invalidate()
         windowAlignmentTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            let frames = self.getAppWindowFrames(for: pid)
-            guard !frames.isEmpty else { return }
+            let windows = self.getAppWindowFrames(for: pid)
+            guard !windows.isEmpty else { return }
             
-            if frames.count == self.overlayPanels.count {
-                for (index, frame) in frames.enumerated() {
-                    let adjustedFrame = self.calculateOverlayFrame(from: self.convertQuartzToAppKit(rect: frame))
-                    let panel = self.overlayPanels[index]
-                    if panel.frame != adjustedFrame {
-                        panel.setFrame(adjustedFrame, display: true, animate: false)
+            let existingIDs = Set(self.overlayPanels.keys)
+            let newIDs = Set(windows.map { $0.0 })
+            
+            if existingIDs == newIDs {
+                for (windowID, frame) in windows {
+                    if let panel = self.overlayPanels[windowID] {
+                        let adjustedFrame = self.calculateOverlayFrame(from: self.convertQuartzToAppKit(rect: frame))
+                        if panel.frame != adjustedFrame {
+                            panel.setFrame(adjustedFrame, display: true, animate: false)
+                        }
                     }
                 }
             } else {
-                // If window count changed, recreate the overlays to match the new window configuration
+                // If window configuration changed, recreate the overlays
                 self.showOverlays(for: bundleIdentifier)
             }
         }
@@ -339,7 +346,7 @@ final class AppLocker: ObservableObject {
             }
         )
         panel.makeKeyAndOrderFront(nil)
-        overlayPanels.append(panel)
+        overlayPanels[0] = panel
         
         var attempts = 0
         windowDetectionTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] timer in
@@ -349,9 +356,9 @@ final class AppLocker: ObservableObject {
             }
             
             attempts += 1
-            let frames = self.getAppWindowFrames(for: app.processIdentifier)
+            let windows = self.getAppWindowFrames(for: app.processIdentifier)
             
-            if !frames.isEmpty {
+            if !windows.isEmpty {
                 timer.invalidate()
                 self.windowDetectionTimer = nil
                 

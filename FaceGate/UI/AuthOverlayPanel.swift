@@ -13,14 +13,14 @@ final class AuthOverlayPanel: NSPanel {
     ///   - onAuthenticated: Called when authentication succeeds.
     ///   - onCancel: Called when the user cancels / wants to quit the locked app.
     init(
-        frame: NSRect,
+        screen: NSScreen,
         appName: String,
         bundleIdentifier: String,
         onAuthenticated: @escaping () -> Void,
         onCancel: @escaping () -> Void
     ) {
         super.init(
-            contentRect: frame,
+            contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -52,6 +52,55 @@ final class AuthOverlayPanel: NSPanel {
         let appIcon = loadAppIcon(bundleIdentifier: bundleIdentifier)
 
         // Host the SwiftUI auth overlay view.
+        let overlayView = AuthOverlayView(
+            appName: appName,
+            appIcon: appIcon,
+            onAuthenticated: onAuthenticated,
+            onCancel: onCancel
+        )
+
+        let hostingView = NSHostingView(rootView: overlayView)
+        hostingView.frame = NSRect(origin: .zero, size: screen.frame.size)
+        hostingView.autoresizingMask = [.width, .height]
+        self.contentView = hostingView
+    }
+
+    /// Create an overlay panel at a specific frame (used for App Window mode overlays).
+    init(
+        frame: NSRect,
+        appName: String,
+        bundleIdentifier: String,
+        onAuthenticated: @escaping () -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        super.init(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
+        if overlayMode == 1 {
+            self.level = .normal
+        } else {
+            self.level = .screenSaver
+        }
+        self.isOpaque = false
+        self.backgroundColor = .clear
+        self.hasShadow = false
+        self.isReleasedWhenClosed = false
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        self.isMovable = false
+        self.isMovableByWindowBackground = false
+        self.hidesOnDeactivate = false
+        self.canHide = false
+        self.becomesKeyOnlyIfNeeded = false
+        self.acceptsMouseMovedEvents = false
+        self.ignoresMouseEvents = false
+
+        let appIcon = loadAppIcon(bundleIdentifier: bundleIdentifier)
+
         let overlayView = AuthOverlayView(
             appName: appName,
             appIcon: appIcon,
