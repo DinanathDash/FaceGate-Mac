@@ -178,7 +178,7 @@ struct AuthOverlayView: View {
                                 if isAuthenticatingWithTouchID {
                                     if authManager.isFaceUnlockAvailable {
                                         smallFallbackButton(icon: "faceid", label: "Face ID") {
-                                            authManager.stopTouchIDAuth()
+                                            
                                             showFallbacks = false
                                             startFaceUnlockProcess()
                                         }
@@ -626,6 +626,7 @@ struct AuthOverlayView: View {
                 if !success {
                     withAnimation {
                         showFallbacks = true
+                    }
                 }
             }
         }
@@ -633,7 +634,7 @@ struct AuthOverlayView: View {
 
     private func showPasswordAuth() {
         authManager.stopFaceAuth()
-        authManager.stopTouchIDAuth()
+        
         NSApp.activate(ignoringOtherApps: true)
         withAnimation {
             showPasswordField = true
