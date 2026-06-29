@@ -41,7 +41,6 @@ struct AppPickerView: View {
                 List(selection: $selectedAppIDs) {
                     if filteredApps.isEmpty && searchText.isEmpty {
                         VStack(spacing: 16) {
-                            Spacer().frame(height: 40)
                             Image(systemName: "lock.open")
                                 .font(.system(size: 36))
                                 .foregroundColor(.secondary)
@@ -52,7 +51,7 @@ struct AppPickerView: View {
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                         }
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, minHeight: 350, maxHeight: .infinity)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     } else if filteredApps.isEmpty {

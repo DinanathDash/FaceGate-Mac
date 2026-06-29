@@ -82,7 +82,7 @@ final class ActionAuthWindow: NSPanel {
         self.hidesOnDeactivate = false
         self.collectionBehavior = [.canJoinAllSpaces]
         self.isMovable = true
-        self.isMovableByWindowBackground = true
+        self.isMovableByWindowBackground = false
 
         let overlayView = AuthOverlayView(
             appName: reason,

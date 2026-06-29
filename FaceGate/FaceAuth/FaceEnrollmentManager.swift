@@ -222,6 +222,7 @@ final class FaceEnrollmentManager: ObservableObject {
             }
 
             // Enable face unlock by default after successful enrollment.
+            UserDefaults.standard.set(true, forKey: FGConstants.faceEnrolledKey)
             UserDefaults.standard.set(true, forKey: FGConstants.faceUnlockEnabledKey)
 
             state = .success

@@ -70,7 +70,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.titlebarAppearsTransparent = false
         window.titlebarSeparatorStyle = .none
         window.toolbarStyle = .automatic
-        window.isMovableByWindowBackground = true
+        window.isMovableByWindowBackground = false
         window.setFrameAutosaveName("FaceGateSettingsWindow")
         window.minSize = NSSize(width: 700, height: 500)
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]

@@ -109,6 +109,7 @@ struct SettingsView: View {
 private struct SettingsSidebarView: View {
     @Binding var selectedTab: SettingsTab?
     @State private var showPermissions = false
+    @State private var showResetConfirmation = false
 
     var body: some View {
         List(selection: $selectedTab) {
@@ -132,6 +133,18 @@ private struct SettingsSidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Permissions")
+                
+                Button(action: { showResetConfirmation = true }) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.red)
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(Color(nsColor: .controlBackgroundColor)))
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                }
+                .buttonStyle(.plain)
+                .help("Reset App")
 
                 Spacer()
             }
@@ -141,6 +154,34 @@ private struct SettingsSidebarView: View {
         .navigationTitle("Settings")
         .sheet(isPresented: $showPermissions) {
             PermissionsDialogView()
+        }
+        .alert("Reset App", isPresented: $showResetConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset", role: .destructive) {
+                resetApp()
+            }
+        } message: {
+            Text("Are you sure you want to completely reset FaceGate? This will delete all settings and enrolled faces, and the app will restart.")
+        }
+    }
+    
+    private func resetApp() {
+        Task {
+            try? FaceDataStore.shared.delete()
+            let bundleId = Bundle.main.bundleIdentifier ?? "com.dweep.FaceGate"
+            let process = Process()
+            process.launchPath = "/usr/bin/defaults"
+            process.arguments = ["delete", bundleId]
+            try? process.run()
+            process.waitUntilExit()
+            
+            await MainActor.run {
+                let restartProcess = Process()
+                restartProcess.launchPath = "/usr/bin/open"
+                restartProcess.arguments = ["-n", Bundle.main.bundlePath]
+                try? restartProcess.run()
+                exit(0)
+            }
         }
     }
 }
@@ -332,6 +373,10 @@ private struct AuthSettingsView: View {
     @State private var enrolledFaces: [FaceEnrollment.EnrolledFace] = []
     @State private var isAddingFace = false
     @State private var faceNames: [UUID: String] = [:]
+    @State private var hoveredFace: UUID?
+    @FocusState private var focusedFace: UUID?
+    @State private var faceToDelete: UUID?
+    @State private var showDeleteFaceAlert = false
 
     var body: some View {
         Form {
@@ -362,94 +407,141 @@ private struct AuthSettingsView: View {
                                     .onChangeCompat(of: faceUnlockEnabled) { newValue in
                                         UserDefaults.standard.set(newValue, forKey: FGConstants.faceUnlockEnabledKey)
                                     }
-                            }
-                            
-                            HStack(spacing: 8) {
-                                Button(faceEnrolled ? "Re-enroll Face" : "Enroll Face") {
+                            } else {
+                                Button("Enroll Face") {
+                                    isAddingFace = false
                                     showFaceEnrollment = true
                                 }
                                 .controlSize(.small)
-
-                                if faceEnrolled {
-                                    Button("Delete Face Data") {
-                                        try? FaceDataStore.shared.delete()
-                                        faceEnrolled = false
-                                        faceUnlockEnabled = false
-                                    }
-                                    .controlSize(.small)
-                                    .foregroundColor(.red)
-                                }
                             }
                         }
                     }
 
                     // Enrolled Faces list
-                    if faceEnrolled && !enrolledFaces.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
+                    if faceEnrolled {
+                        VStack(alignment: .leading, spacing: 12) {
                             Text("Enrolled Faces (Max 3)")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(.secondary)
                                 .padding(.top, 4)
 
-                            ForEach(enrolledFaces) { face in
-                                HStack(spacing: 8) {
-                                    Image(systemName: "person.crop.circle.badge.checkmark")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.green)
-                                    
-                                    // Inline rename TextField
-                                    TextField("Face Name", text: Binding(
-                                        get: { faceNames[face.id] ?? face.name },
-                                        set: { faceNames[face.id] = $0 }
-                                    ), onEditingChanged: { isEditing in
-                                        if !isEditing {
-                                            if let name = faceNames[face.id] {
-                                                renameFace(id: face.id, newName: name)
+                            HStack {
+                                Spacer()
+                                HStack(alignment: .top, spacing: 24) {
+                                    ForEach(enrolledFaces) { face in
+                                        VStack(spacing: 4) {
+                                            ZStack(alignment: .topLeading) {
+                                                Image(systemName: "person.crop.circle")
+                                                    .font(.system(size: 44, weight: .light))
+                                                    .foregroundColor(.gray)
+                                                    .frame(width: 50, height: 50)
+
+                                                if hoveredFace == face.id {
+                                                    Button(action: {
+                                                        faceToDelete = face.id
+                                                        showDeleteFaceAlert = true
+                                                    }) {
+                                                        Image(systemName: "xmark.circle.fill")
+                                                            .foregroundColor(.gray)
+                                                            .background(Circle().fill(Color.black))
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                    .offset(x: -6, y: -6)
+                                                }
                                             }
+                                            .onHover { isHovered in
+                                                if isHovered {
+                                                    hoveredFace = face.id
+                                                } else if hoveredFace == face.id {
+                                                    hoveredFace = nil
+                                                }
+                                            }
+
+                                            let faceIndex = enrolledFaces.firstIndex(where: { $0.id == face.id }) ?? 0
+                                            let defaultName = "Face \(faceIndex + 1)"
+                                            let currentName = faceNames[face.id] ?? face.name
+                                            let isDefault = currentName == defaultName
+                                            
+                                            MacCenteredTextField(
+                                                text: Binding(
+                                                    get: { (isDefault || faceNames[face.id]?.isEmpty == true) ? "" : currentName },
+                                                    set: { newValue in
+                                                        faceNames[face.id] = newValue
+                                                        if !newValue.isEmpty {
+                                                            renameFace(id: face.id, newName: newValue)
+                                                        }
+                                                    }
+                                                ),
+                                                placeholder: defaultName,
+                                                onCommit: {
+                                                    if faceNames[face.id]?.isEmpty == true {
+                                                        faceNames[face.id] = defaultName
+                                                        renameFace(id: face.id, newName: defaultName)
+                                                    }
+                                                }
+                                            )
+                                            .frame(width: 80, height: 20)
                                         }
-                                    }, onCommit: {
-                                        if let name = faceNames[face.id] {
-                                            renameFace(id: face.id, newName: name)
-                                        }
-                                    })
-                                    .textFieldStyle(.plain)
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white)
-                                    
-                                    Spacer()
-                                    
-                                    Button(action: {
-                                        deleteFace(id: face.id)
-                                    }) {
-                                        Image(systemName: "trash")
-                                            .foregroundColor(.red.opacity(0.8))
                                     }
-                                    .buttonStyle(.plain)
+
+                                    if enrolledFaces.count < 3 {
+                                        VStack(spacing: 4) {
+                                            Button(action: {
+                                                isAddingFace = true
+                                                showFaceEnrollment = true
+                                            }) {
+                                                Image(systemName: "plus")
+                                                    .font(.system(size: 24, weight: .light))
+                                                    .foregroundColor(.secondary)
+                                                    .frame(width: 50, height: 50)
+                                                    .background(Circle().fill(Color.white.opacity(0.05)))
+                                            }
+                                            .buttonStyle(.plain)
+
+                                            Text("Add Face")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.secondary)
+                                                .frame(width: 80, height: 20)
+                                        }
+                                    }
                                 }
-                                .padding(.vertical, 4)
-                                .padding(.horizontal, 8)
-                                .background(Color.white.opacity(0.04))
-                                .cornerRadius(6)
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                            .alert("Delete Face", isPresented: $showDeleteFaceAlert, presenting: faceToDelete) { faceId in
+                                Button("Cancel", role: .cancel) {
+                                    faceToDelete = nil
+                                }
+                                Button("Delete", role: .destructive) {
+                                    deleteFace(id: faceId)
+                                    faceToDelete = nil
+                                }
+                            } message: { faceId in
+                                if let face = enrolledFaces.first(where: { $0.id == faceId }) {
+                                    let currentName = faceNames[face.id] ?? face.name
+                                    Text("Are you sure you want to delete '\(currentName)'? This action cannot be undone.")
+                                } else {
+                                    Text("Are you sure you want to delete this face? This action cannot be undone.")
+                                }
+                            }
+                            .onChangeCompat(of: focusedFace) { newFocus in
+                                if newFocus == nil {
+                                    for (index, face) in enrolledFaces.enumerated() {
+                                        if faceNames[face.id]?.isEmpty == true {
+                                            let defaultName = "Face \(index + 1)"
+                                            faceNames[face.id] = defaultName
+                                            renameFace(id: face.id, newName: defaultName)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
 
-                    // Enroll / Add Face / Delete buttons.
-                    HStack {
-                        if !faceEnrolled {
-                            Button("Enroll Face") {
-                                isAddingFace = false
-                                showFaceEnrollment = true
-                            }
-                            .controlSize(.small)
-                        } else {
-                            if enrolledFaces.count < 3 {
-                                Button("Add Face") {
-                                    isAddingFace = true
-                                    showFaceEnrollment = true
-                                }
-                                .controlSize(.small)
-                            }
+                    // Action buttons
+                    if faceEnrolled {
+                        HStack {
+                            Spacer()
                             
                             Button("Re-enroll Fresh") {
                                 isAddingFace = false
@@ -463,25 +555,6 @@ private struct AuthSettingsView: View {
                             }
                             .controlSize(.small)
                             .foregroundColor(.red)
-                        }
-                    }
-
-                    // Divider and Primary Auth Option
-                    Divider()
-                        .padding(.vertical, 4)
-                        
-                    HStack {
-                        Text("Default Authentication")
-                            .font(.system(size: 13))
-                        Spacer()
-                        Picker("", selection: $primaryAuthOption) {
-                            Text("Face Unlock").tag("face")
-                            Text("Touch ID").tag("touchid")
-                            Text("Password").tag("password")
-                        }
-                        .frame(width: 150)
-                        .onChangeCompat(of: primaryAuthOption) { newValue in
-                            UserDefaults.standard.set(newValue, forKey: FGConstants.primaryAuthOptionKey)
                         }
                     }
 
@@ -520,6 +593,25 @@ private struct AuthSettingsView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.vertical, 4)
+                    }
+
+                    // Divider and Primary Auth Option
+                    Divider()
+                        .padding(.vertical, 4)
+                        
+                    HStack {
+                        Text("Default Authentication")
+                            .font(.system(size: 13))
+                        Spacer()
+                        Picker("", selection: $primaryAuthOption) {
+                            Text("Face Unlock").tag("face")
+                            Text("Touch ID").tag("touchid")
+                            Text("Password").tag("password")
+                        }
+                        .frame(width: 150)
+                        .onChangeCompat(of: primaryAuthOption) { newValue in
+                            UserDefaults.standard.set(newValue, forKey: FGConstants.primaryAuthOptionKey)
+                        }
                     }
                 }
             } header: {
@@ -1689,5 +1781,86 @@ private struct CameraPickerView: View {
             return cam.localizedName
         }
         return cameraManager.availableCameras.first?.localizedName ?? "No camera found"
+    }
+}
+
+struct MacCenteredTextField: NSViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+    var onCommit: () -> Void
+    
+    func makeNSView(context: Context) -> NSTextField {
+        let textField = NSTextField()
+        textField.isBordered = false
+        textField.drawsBackground = false
+        textField.alignment = .center
+        textField.placeholderString = placeholder
+        textField.delegate = context.coordinator
+        textField.font = .systemFont(ofSize: 12)
+        textField.focusRingType = .none
+        return textField
+    }
+    
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: MacCenteredTextField
+        var monitor: Any?
+        
+        init(_ parent: MacCenteredTextField) {
+            self.parent = parent
+        }
+        
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            guard let textField = obj.object as? NSTextField else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak textField] event in
+                guard let tf = textField, let window = tf.window else { return event }
+                let locationInWindow = event.locationInWindow
+                let locationInView = tf.convert(locationInWindow, from: nil)
+                if !tf.bounds.contains(locationInView) {
+                    window.makeFirstResponder(nil)
+                }
+                return event
+            }
+        }
+        
+        func controlTextDidChange(_ obj: Notification) {
+            if let textField = obj.object as? NSTextField {
+                parent.text = textField.stringValue
+            }
+        }
+        
+        func controlTextDidEndEditing(_ obj: Notification) {
+            if let m = monitor {
+                NSEvent.removeMonitor(m)
+                monitor = nil
+            }
+            if let textField = obj.object as? NSTextField {
+                parent.text = textField.stringValue
+                parent.onCommit()
+            }
+        }
+        
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                parent.text = textView.string
+                parent.onCommit()
+                textView.window?.makeFirstResponder(nil)
+                return true
+            }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                textView.window?.makeFirstResponder(nil)
+                return true
+            }
+            return false
+        }
     }
 }
