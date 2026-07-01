@@ -40,8 +40,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private init() {
+        // Determine initial size based on the saved theme
+        let initialSize = CGSize(width: 750, height: 540)
+            
         let window = SettingsWindow(
-            contentRect: NSRect(origin: .zero, size: CGSize(width: 850, height: 620)),
+            contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [
                 .titled,
                 .closable,
@@ -54,7 +57,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         )
 
         super.init(window: window)
-        configureWindow()
+        configureWindow(with: initialSize)
     }
 
     @available(*, unavailable)
@@ -62,7 +65,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func configureWindow() {
+    private func configureWindow(with size: CGSize) {
         guard let window else { return }
 
         window.title = "Settings"
@@ -71,13 +74,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.titlebarSeparatorStyle = .none
         window.toolbarStyle = .automatic
         window.isMovableByWindowBackground = false
-        window.setFrameAutosaveName("FaceGateSettingsWindow")
-        window.minSize = NSSize(width: 700, height: 500)
+        window.minSize = NSSize(width: 660, height: 500)
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]
         
-        if let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) {
-            let x = screen.frame.midX - window.frame.width / 2
-            let y = screen.frame.midY - window.frame.height / 2
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main {
+            let windowFrame = window.frame
+            let x = screen.frame.midX - windowFrame.size.width / 2
+            let y = screen.frame.midY - windowFrame.size.height / 2
             window.setFrameOrigin(NSPoint(x: x, y: y))
         } else {
             window.center()

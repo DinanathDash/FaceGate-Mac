@@ -23,6 +23,9 @@ enum FGConstants {
 
     /// Key: whether the initial setup has been completed.
     static let setupCompletedKey = "setupCompleted"
+    
+    /// Key: the selected app theme (Classic vs Modern).
+    static let appThemeKey = "appTheme"
 
     /// Key: whether face unlock is enabled.
     static let faceUnlockEnabledKey = "faceUnlockEnabled"

@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Menu Bar App State
     private var statusItem: NSStatusItem?
     private var menuBuilder: MenuBuilder?
+    private var classicPopover: NSPopover?
+    private var eventMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Initialize Sparkle updater for automatic updates.
@@ -64,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(openSettingsWindow),
-            name: .openSettings,
+            name: Notification.Name.openSettings,
             object: nil
         )
 
@@ -72,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(openSetupWindow),
-            name: .openSetup,
+            name: Notification.Name.openSetup,
             object: nil
         )
 
@@ -209,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
                 // Open settings window
-                NotificationCenter.default.post(name: .openSettings, object: nil)
+                NotificationCenter.default.post(name: Notification.Name.openSettings, object: nil)
             }
         )
 
@@ -275,11 +277,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let icon = NSImage(named: FGConstants.menuBarIcon)
             icon?.isTemplate = true
             button.image = icon
+            button.action = #selector(menuBarButtonClicked(_:))
+            button.target = self
         }
         
         let builder = MenuBuilder()
         self.menuBuilder = builder
-        statusItem?.menu = builder.buildMenu()
+        
+        // Setup Popover for Classic Theme
+        let popover = NSPopover()
+        popover.contentSize = NSSize(width: 320, height: 420)
+        popover.behavior = .transient
+        popover.contentViewController = NSHostingController(rootView: ClassicMenuBarView())
+        self.classicPopover = popover
+        
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            if let popover = self?.classicPopover, popover.isShown {
+                popover.performClose(event)
+            }
+        }
+    }
+    
+    @MainActor
+    @objc private func menuBarButtonClicked(_ sender: NSStatusBarButton) {
+        let themeRaw = UserDefaults.standard.string(forKey: FGConstants.appThemeKey) ?? AppTheme.classic.rawValue
+        let theme = AppTheme(rawValue: themeRaw) ?? .classic
+        
+        if theme == .classic {
+            if let popover = classicPopover {
+                if popover.isShown {
+                    popover.performClose(sender)
+                } else {
+                    popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+                    popover.contentViewController?.view.window?.makeKey()
+                }
+            }
+        } else {
+            if let menu = menuBuilder?.buildMenu() {
+                statusItem?.menu = menu
+                statusItem?.button?.performClick(nil)
+                statusItem?.menu = nil // Reset so we intercept next click
+            }
+        }
     }
 }
 
