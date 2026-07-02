@@ -11,7 +11,7 @@ struct ClassicSettingsView: View {
     @ObservedObject var lockedAppsManager = LockedAppsManager.shared
     @ObservedObject var chromeState: SettingsChromeState
 
-    @State private var selectedTab: SettingsTab = .lockedApps
+    @AppStorage("lastSelectedSettingsTab") private var selectedTab: SettingsTab = .lockedApps
 
     init(chromeState: SettingsChromeState = SettingsChromeState()) {
         self.chromeState = chromeState
@@ -68,7 +68,6 @@ struct ClassicSettingsView: View {
 }
 
 private struct CodexSettingsSidebar: View {
-    @EnvironmentObject var chromeState: WindowChromeState
     @Binding var selectedTab: ClassicSettingsView.SettingsTab
     @State private var showPermissions = false
     @State private var showResetConfirmation = false
@@ -130,22 +129,6 @@ private struct CodexSettingsSidebar: View {
                 Spacer()
 
                 HStack(spacing: 12) {
-                    Button(action: {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                            chromeState.isSidebarCollapsed.toggle()
-                        }
-                    }) {
-                        Image(systemName: "sidebar.left")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.8))
-                            .frame(width: 28, height: 28)
-                            .background(Circle().fill(Color(nsColor: .controlBackgroundColor)))
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
-                            .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Toggle Sidebar")
-
                     Button(action: { showThemePicker = true }) {
                         Image(systemName: "paintbrush.fill")
                             .font(.system(size: 14))
@@ -266,28 +249,11 @@ private struct CodexSidebarRow: View {
 }
 
 private struct SettingsDetailPane: View {
-    @EnvironmentObject var chromeState: WindowChromeState
     let selectedTab: ClassicSettingsView.SettingsTab
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .bottom) {
-                if chromeState.isSidebarCollapsed {
-                    Button(action: {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                            chromeState.isSidebarCollapsed.toggle()
-                        }
-                    }) {
-                        Image(systemName: "sidebar.left")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, 8)
-                    .padding(.bottom, 2)
-                    .help("Show Sidebar")
-                }
-                
                 VStack(alignment: .leading, spacing: 4) {
                     Text(selectedTab.rawValue)
                         .font(.system(size: 24, weight: .semibold))

@@ -237,8 +237,11 @@ struct ClassicMenuBarView: View {
     }
 
     private func openSettings() {
-        // Post a notification to open the settings window.
-        NotificationCenter.default.post(name: Notification.Name.openSettings, object: nil)
+        if !UserDefaults.standard.bool(forKey: FGConstants.setupCompletedKey) {
+            NotificationCenter.default.post(name: Notification.Name.openSetup, object: nil)
+        } else {
+            NotificationCenter.default.post(name: Notification.Name.openSettings, object: nil)
+        }
     }
 
     private func quitApplication() {

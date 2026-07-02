@@ -57,13 +57,6 @@ struct MenuHeaderView: View {
         .onReceive(NotificationCenter.default.publisher(for: .menuStateDidChange)) { _ in
             id = UUID()
         }
-        .onAppear {
-            if !UserDefaults.standard.bool(forKey: FGConstants.setupCompletedKey) {
-                NotificationCenter.default.post(name: .openSetup, object: nil)
-            } else if !appMonitor.isMonitoring {
-                appMonitor.startMonitoring()
-            }
-        }
     }
 }
 

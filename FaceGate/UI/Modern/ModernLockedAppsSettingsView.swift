@@ -55,41 +55,48 @@ private struct LockedAppSheetView: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Toggle("Custom Session Timer", isOn: $hasCustomTimer)
-                            .toggleStyle(.checkbox)
+                        Text("Custom Session Timer")
                             .font(.system(size: 13))
-                        
-                        Spacer(minLength: 16)
-                        
-                        Picker("", selection: $customTimeoutMinutes) {
-                            Text("Immediately").tag(0.0)
-                            Text("For 1 minute").tag(1.0)
-                            Text("For 2 minutes").tag(2.0)
-                            Text("For 3 minutes").tag(3.0)
-                            Text("For 5 minutes").tag(5.0)
-                            Text("For 10 minutes").tag(10.0)
-                            Text("For 20 minutes").tag(20.0)
-                            Text("For 30 minutes").tag(30.0)
-                            Text("For 1 hour").tag(60.0)
-                            Text("For 1 hour, 30 minutes").tag(90.0)
-                            Text("For 2 hours").tag(120.0)
-                            Text("For 2 hours, 30 minutes").tag(150.0)
-                            Text("For 3 hours").tag(180.0)
-                            Divider()
-                            Text("Never").tag(FGConstants.indefiniteSliderValue)
-                        }
-                        .frame(width: 200)
-                        .disabled(!hasCustomTimer)
+                        Spacer()
+                        Toggle("", isOn: $hasCustomTimer)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .controlSize(.small)
                     }
                     
-                    if hasCustomTimer {
-                        Text("Override the global timer for this specific app.")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .lineLimit(nil)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.leading, 20)
-                            
+                    Text("Override the global timer for this specific app.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                
+                if hasCustomTimer {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Timer Duration")
+                                .font(.system(size: 13))
+                            Spacer(minLength: 16)
+                            Picker("", selection: $customTimeoutMinutes) {
+                                Text("Immediately").tag(0.0)
+                                Text("For 1 minute").tag(1.0)
+                                Text("For 2 minutes").tag(2.0)
+                                Text("For 3 minutes").tag(3.0)
+                                Text("For 5 minutes").tag(5.0)
+                                Text("For 10 minutes").tag(10.0)
+                                Text("For 20 minutes").tag(20.0)
+                                Text("For 30 minutes").tag(30.0)
+                                Text("For 1 hour").tag(60.0)
+                                Text("For 1 hour, 30 minutes").tag(90.0)
+                                Text("For 2 hours").tag(120.0)
+                                Text("For 2 hours, 30 minutes").tag(150.0)
+                                Text("For 3 hours").tag(180.0)
+                                Divider()
+                                Text("Never").tag(FGConstants.indefiniteSliderValue)
+                            }
+                            .frame(width: 200)
+                        }
+                        
                         if customTimeoutMinutes > 0 && customTimeoutMinutes < FGConstants.indefiniteSliderValue {
                             HStack {
                                 Text("Timer Mode")
@@ -111,43 +118,38 @@ private struct LockedAppSheetView: View {
                                     .foregroundColor(.secondary)
                                     .lineLimit(nil)
                                     .fixedSize(horizontal: false, vertical: true)
-                                    .padding(.leading, 20)
                             case 2:
                                 Text("The timer only counts down while the app is not in focus. Switch away for the full duration to trigger a lock.")
                                     .font(.system(size: 11))
                                     .foregroundColor(.secondary)
                                     .lineLimit(nil)
                                     .fixedSize(horizontal: false, vertical: true)
-                                    .padding(.leading, 20)
                             default:
                                 let globalMode = UserDefaults.standard.bool(forKey: FGConstants.sessionTimerFromFocusKey)
                                 if globalMode {
-                                    Text("Using global: timer counts from when app loses focus.")
+                                    Text("Global setting: The timer only counts down while the app is not in focus. Switch away for the full duration to trigger a lock.")
                                         .font(.system(size: 11))
                                         .foregroundColor(.secondary)
                                         .lineLimit(nil)
                                         .fixedSize(horizontal: false, vertical: true)
-                                        .padding(.leading, 20)
                                 } else {
-                                    Text("Using global: timer counts total elapsed time since unlock.")
+                                    Text("Global setting: The timer counts total elapsed time since unlock, regardless of whether you're actively using the app.")
                                         .font(.system(size: 11))
                                         .foregroundColor(.secondary)
                                         .lineLimit(nil)
                                         .fixedSize(horizontal: false, vertical: true)
-                                        .padding(.leading, 20)
                                 }
                             }
                         }
-                    } else {
-                        let globalTimeout = SessionManager.shared.sessionTimeout / 60
-                        let timeString = globalTimeout == 0 ? "Immediately" : (globalTimeout == FGConstants.indefiniteSliderValue ? "Never" : "\(Int(globalTimeout)) min")
-                        Text("Using Global Timer (\(timeString))")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .lineLimit(nil)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.leading, 20)
                     }
+                } else {
+                    let globalTimeout = SessionManager.shared.sessionTimeout / 60
+                    let timeString = globalTimeout == 0 ? "Immediately" : (globalTimeout == FGConstants.indefiniteSliderValue ? "Never" : "\(Int(globalTimeout)) min")
+                    Text("Using Global Timer (\(timeString))")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(20)

@@ -30,6 +30,11 @@ class MenuBuilder: NSObject, NSMenuDelegate {
         // We MUST populate the menu synchronously to prevent the visual glitch 
         // where the menu animates open while the async task is still swapping items.
         MainActor.assumeIsolated {
+            if !UserDefaults.standard.bool(forKey: FGConstants.setupCompletedKey) {
+                NotificationCenter.default.post(name: Notification.Name.openSetup, object: nil)
+            } else if !AppMonitor.shared.isMonitoring {
+                AppMonitor.shared.startMonitoring()
+            }
             self.populateMenu(menu)
         }
     }
@@ -202,7 +207,11 @@ class MenuBuilder: NSObject, NSMenuDelegate {
     }
     
     @objc private func openSettings() {
-        NotificationCenter.default.post(name: .openSettings, object: nil)
+        if !UserDefaults.standard.bool(forKey: FGConstants.setupCompletedKey) {
+            NotificationCenter.default.post(name: Notification.Name.openSetup, object: nil)
+        } else {
+            NotificationCenter.default.post(name: .openSettings, object: nil)
+        }
     }
     
     @objc private func quitApplication() {

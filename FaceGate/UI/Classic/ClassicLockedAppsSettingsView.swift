@@ -531,77 +531,85 @@ private struct LockedAppDetailView: View {
                         // Custom session timer configurations
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                Toggle("Custom Session Timer", isOn: $hasCustomTimer)
-                                    .toggleStyle(.checkbox)
-                                
+                                Text("Custom Session Timer")
+                                    .font(.system(size: 13))
                                 Spacer()
-                                
-                                if hasCustomTimer {
-                                    if customTimeoutMinutes == FGConstants.indefiniteSliderValue {
-                                        Text("Keep Unlocked Indefinitely")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(.blue)
-                                    } else if customTimeoutMinutes == 0 {
-                                        Text("Lock Immediately")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(.blue)
-                                    } else {
-                                        Text("\(Int(customTimeoutMinutes)) min")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(.blue)
-                                    }
-                                } else {
-                                    let globalTimeout = SessionManager.shared.sessionTimeout / 60
-                                    if globalTimeout == 0 {
-                                        Text("Using Global Timer (Lock Immediately)")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.secondary)
-                                    } else {
-                                        Text("Using Global Timer (\(Int(globalTimeout)) min)")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
+                                Toggle("", isOn: $hasCustomTimer)
+                                    .toggleStyle(.switch)
+                                    .labelsHidden()
+                                    .controlSize(.small)
                             }
                             
-                            HStack(spacing: 12) {
-                                Slider(value: $customTimeoutMinutes, in: 0...FGConstants.indefiniteSliderValue, step: 1)
-                                    .disabled(!hasCustomTimer)
-                                
-                                Text("0-31m")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.secondary)
-                            }
-                            .opacity(hasCustomTimer ? 1.0 : 0.5)
-
-                            if hasCustomTimer && customTimeoutMinutes > 0 && customTimeoutMinutes < FGConstants.indefiniteSliderValue {
-                                Picker("Timer Mode", selection: $appTimerMode) {
-                                    Text("Use Global Setting").tag(0)
-                                    Text("From last unlock").tag(1)
-                                    Text("From when app loses focus").tag(2)
+                            if hasCustomTimer {
+                                HStack {
+                                    Text("Timer Duration")
+                                        .font(.system(size: 13))
+                                    Spacer(minLength: 16)
+                                    Picker("", selection: $customTimeoutMinutes) {
+                                        Text("Immediately").tag(0.0)
+                                        Text("For 1 minute").tag(1.0)
+                                        Text("For 2 minutes").tag(2.0)
+                                        Text("For 3 minutes").tag(3.0)
+                                        Text("For 5 minutes").tag(5.0)
+                                        Text("For 10 minutes").tag(10.0)
+                                        Text("For 20 minutes").tag(20.0)
+                                        Text("For 30 minutes").tag(30.0)
+                                        Text("For 1 hour").tag(60.0)
+                                        Text("For 1 hour, 30 minutes").tag(90.0)
+                                        Text("For 2 hours").tag(120.0)
+                                        Text("For 2 hours, 30 minutes").tag(150.0)
+                                        Text("For 3 hours").tag(180.0)
+                                        Divider()
+                                        Text("Never").tag(FGConstants.indefiniteSliderValue)
+                                    }
+                                    .frame(width: 200)
                                 }
-                                .pickerStyle(.menu)
-                                switch appTimerMode {
-                                case 1:
-                                    Text("The timer counts total elapsed time since unlock, regardless of whether you're actively using the app.")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-                                case 2:
-                                    Text("The timer only counts down while the app is not in focus. Switch away for the full duration to trigger a lock.")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-                                default:
-                                    let globalMode = UserDefaults.standard.bool(forKey: FGConstants.sessionTimerFromFocusKey)
-                                    if globalMode {
-                                        Text("Using global: timer counts from when app loses focus.")
+                                
+                                if customTimeoutMinutes > 0 && customTimeoutMinutes < FGConstants.indefiniteSliderValue {
+                                    Picker("Timer Mode", selection: $appTimerMode) {
+                                        Text("Use Global Setting").tag(0)
+                                        Text("From last unlock").tag(1)
+                                        Text("From when app loses focus").tag(2)
+                                    }
+                                    .pickerStyle(.menu)
+                                    switch appTimerMode {
+                                    case 1:
+                                        Text("The timer counts total elapsed time since unlock, regardless of whether you're actively using the app.")
                                             .font(.system(size: 11))
                                             .foregroundColor(.secondary)
-                                    } else {
-                                        Text("Using global: timer counts total elapsed time since unlock.")
+                                            .lineLimit(nil)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    case 2:
+                                        Text("The timer only counts down while the app is not in focus. Switch away for the full duration to trigger a lock.")
                                             .font(.system(size: 11))
                                             .foregroundColor(.secondary)
+                                            .lineLimit(nil)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    default:
+                                        let globalMode = UserDefaults.standard.bool(forKey: FGConstants.sessionTimerFromFocusKey)
+                                        if globalMode {
+                                            Text("Global setting: The timer only counts down while the app is not in focus. Switch away for the full duration to trigger a lock.")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(nil)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        } else {
+                                            Text("Global setting: The timer counts total elapsed time since unlock, regardless of whether you're actively using the app.")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(nil)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
                                     }
                                 }
+                            } else {
+                                let globalTimeout = SessionManager.shared.sessionTimeout / 60
+                                let timeString = globalTimeout == 0 ? "Immediately" : (globalTimeout == FGConstants.indefiniteSliderValue ? "Never" : "\(Int(globalTimeout)) min")
+                                Text("Using Global Timer (\(timeString))")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(nil)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         .padding(.vertical, 8)

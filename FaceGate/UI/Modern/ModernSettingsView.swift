@@ -30,7 +30,19 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 @Observable
 final class SettingsNavigation {
     static let shared = SettingsNavigation()
-    var selectedTab: SettingsTab? = .lockedApps
+    var selectedTab: SettingsTab? = {
+        if let raw = UserDefaults.standard.string(forKey: "lastSelectedSettingsTab"),
+           let tab = SettingsTab(rawValue: raw) {
+            return tab
+        }
+        return .lockedApps
+    }() {
+        didSet {
+            if let value = selectedTab?.rawValue {
+                UserDefaults.standard.set(value, forKey: "lastSelectedSettingsTab")
+            }
+        }
+    }
     private init() {}
 }
 
@@ -71,6 +83,12 @@ struct ModernSettingsView: View {
             }
         }
         .onChangeCompat(of: navigation.selectedTab) { _ in recordNavigation() }
+        .onAppear {
+            if let raw = UserDefaults.standard.string(forKey: "lastSelectedSettingsTab"),
+               let tab = SettingsTab(rawValue: raw) {
+                navigation.selectedTab = tab
+            }
+        }
     }
 
     private var canGoBack: Bool { historyIndex > 0 }
@@ -519,33 +537,53 @@ struct AuthSettingsView: View {
                             .padding(.vertical, 4)
                             
                         VStack(alignment: .leading, spacing: 8) {
-                            HStack(alignment: .top) {
-                                Text("Sensitivity")
-                                    .font(.system(size: 13))
-                                    .padding(.top, 3)
-                                Spacer()
-                                VStack(spacing: 2) {
+                            if currentTheme == .classic {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Sensitivity")
+                                            .font(.system(size: 12))
+                                        Spacer()
+                                        Text(sensitivityLabel)
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                    }
                                     Slider(value: $faceThreshold, in: 0.4...0.9, step: 0.05)
                                         .onChangeCompat(of: faceThreshold) { newValue in
                                             AuthenticationManager.shared.faceAuthManager.updateThreshold(newValue)
                                         }
-                                        .labelsHidden()
-                                    
-                                    HStack {
-                                        Text("Permissive")
-                                        Spacer()
-                                        Text("Strict")
-                                    }
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(.secondary)
+                                    Text("Higher sensitivity requires a closer match. Lower is more permissive.")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary.opacity(0.7))
                                 }
-                                .frame(width: 220)
+                            } else {
+                                HStack(alignment: .top) {
+                                    Text("Sensitivity")
+                                        .font(.system(size: 13))
+                                        .padding(.top, 3)
+                                    Spacer()
+                                    VStack(spacing: 2) {
+                                        Slider(value: $faceThreshold, in: 0.4...0.9, step: 0.05)
+                                            .onChangeCompat(of: faceThreshold) { newValue in
+                                                AuthenticationManager.shared.faceAuthManager.updateThreshold(newValue)
+                                            }
+                                            .labelsHidden()
+                                        
+                                        HStack {
+                                            Text("Permissive")
+                                            Spacer()
+                                            Text("Strict")
+                                        }
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                    }
+                                    .frame(width: 220)
+                                }
+                                
+                                Text("Higher sensitivity requires a closer match. Lower is more permissive.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                            
-                            Text("Higher sensitivity requires a closer match. Lower is more permissive.")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.vertical, 4)
                         .disabled(!faceUnlockEnabled)
@@ -796,6 +834,11 @@ struct AuthSettingsView: View {
         } else {
             enrolledFaces = []
             faceNames = [:]
+        }
+        
+        if primaryAuthOption == "face" && (!faceEnrolled || !faceUnlockEnabled) {
+            primaryAuthOption = isTouchIDAvailable ? "touchid" : "password"
+            UserDefaults.standard.set(primaryAuthOption, forKey: FGConstants.primaryAuthOptionKey)
         }
     }
 
