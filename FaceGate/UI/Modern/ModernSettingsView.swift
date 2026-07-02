@@ -1428,7 +1428,7 @@ struct BehaviorSettingsView: View {
 
 // MARK: - About View
 
-struct AboutView: View {
+struct ClassicAboutView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -1486,7 +1486,6 @@ struct AboutView: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 16, height: 16)
-                                // Standard native button color usually applied automatically, or we can use primary
                                 .foregroundColor(.primary)
                             Text("GitHub Repository")
                                 .font(.system(size: 13, weight: .medium))
@@ -1523,6 +1522,130 @@ struct AboutView: View {
             .padding(.top, 48)
             .padding(.bottom, 32)
             .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+struct ModernAboutView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("About FaceGate")
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 4)
+                        
+                    GroupBox {
+                        HStack(alignment: .center, spacing: 16) {
+                            if let appIcon = NSApp.applicationIconImage {
+                                Image(nsImage: appIcon)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 64, height: 64)
+                            } else {
+                                Image(systemName: "app.fill")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 64, height: 64)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text("FaceGate")
+                                        .font(.system(size: 16, weight: .bold))
+                                    Text("(v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"))")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                                Text("A privacy-focused app locker for macOS with face authentication.")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Security Disclaimer")
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 4)
+                        
+                    HStack {
+                        Text("Face Unlock is a convenience feature using the built-in camera. It is NOT equivalent to Apple's Face ID and may be susceptible to photo-based spoofing. For maximum security, use Touch ID or the app password.")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                    }
+                    .padding(16)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                    )
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Community")
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 4)
+                        
+                    HStack(spacing: 12) {
+                        Button {
+                            NSWorkspace.shared.open(URL(string: "https://github.com/dweep-desai/FaceGate-Mac")!)
+                        } label: {
+                            Label {
+                                Text("GitHub Repository")
+                            } icon: {
+                                Image("GitHubIcon")
+                                    .resizable()
+                                    .frame(width: 14, height: 14)
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        
+                        Button {
+                            NSWorkspace.shared.open(URL(string: "https://github.com/sponsors/dweep-desai")!)
+                        } label: {
+                            Label("Sponsor on GitHub", systemImage: "heart.fill")
+                                .foregroundColor(.pink)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                
+                VStack(spacing: 4) {
+                    Text("Open Source - MIT License")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("© 2026 Dweep Desai")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 16)
+            }
+            .padding(32)
+        }
+    }
+}
+
+struct AboutView: View {
+    @AppStorage(FGConstants.appThemeKey) private var currentThemeRaw = AppTheme.classic.rawValue
+    private var currentTheme: AppTheme { AppTheme(rawValue: currentThemeRaw) ?? .classic }
+    
+    var body: some View {
+        if currentTheme == .classic {
+            ClassicAboutView()
+        } else {
+            ModernAboutView()
         }
     }
 }
