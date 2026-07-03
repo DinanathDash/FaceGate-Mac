@@ -1483,6 +1483,7 @@ struct ClassicAboutView: View {
                     Link(destination: URL(string: "https://github.com/dweep-desai/FaceGate-Mac")!) {
                         HStack(spacing: 8) {
                             Image("GitHubIcon")
+                                .renderingMode(.template)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 16, height: 16)
@@ -1604,6 +1605,7 @@ struct ModernAboutView: View {
                                 Text("GitHub Repository")
                             } icon: {
                                 Image("GitHubIcon")
+                                    .renderingMode(.template)
                                     .resizable()
                                     .frame(width: 14, height: 14)
                                     .foregroundColor(.primary)

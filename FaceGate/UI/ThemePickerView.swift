@@ -45,8 +45,11 @@ struct ThemePickerView: View {
             HStack {
                 Spacer()
                 Button("Apply") {
-                    currentThemeRaw = selectedTheme
+                    let newTheme = selectedTheme
                     dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        currentThemeRaw = newTheme
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .controlSize(.large)

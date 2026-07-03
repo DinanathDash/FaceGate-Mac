@@ -10,10 +10,26 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        if currentTheme == .classic {
-            ClassicSettingsView()
-        } else {
-            ModernSettingsView()
+        Group {
+            if currentTheme == .classic {
+                ClassicSettingsView()
+            } else {
+                ModernSettingsView()
+            }
+        }
+        .id(currentTheme)
+        .onAppear { forceWindowAppearance() }
+        .onChangeCompat(of: currentTheme) { _ in forceWindowAppearance() }
+    }
+    
+    private func forceWindowAppearance() {
+        DispatchQueue.main.async {
+            NSApp.appearance = currentTheme == .classic ? NSAppearance(named: .darkAqua) : nil
+            for window in NSApp.windows where window.title == "Settings" || String(describing: type(of: window)) == "SettingsWindow" {
+                window.appearance = currentTheme == .classic ? NSAppearance(named: .darkAqua) : nil
+                window.contentView?.needsDisplay = true
+                window.displayIfNeeded()
+            }
         }
     }
 }

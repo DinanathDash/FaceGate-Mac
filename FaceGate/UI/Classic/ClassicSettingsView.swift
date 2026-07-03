@@ -61,7 +61,6 @@ struct ClassicSettingsView: View {
             }
             .animation(.spring(response: 0.28, dampingFraction: 0.86), value: chromeState.isSidebarCollapsed)
         }
-        .preferredColorScheme(.dark)
         .frame(minWidth: 750, minHeight: 540)
         .toolbar(.hidden)
     }
