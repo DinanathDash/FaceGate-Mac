@@ -68,6 +68,7 @@ struct ClassicSettingsView: View {
 
 private struct CodexSettingsSidebar: View {
     @Binding var selectedTab: ClassicSettingsView.SettingsTab
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showPermissions = false
     @State private var showResetConfirmation = false
     @State private var showThemePicker = false
@@ -82,25 +83,27 @@ private struct CodexSettingsSidebar: View {
         ZStack {
             CodexSidebarVisualEffect(material: .sidebar, blendingMode: .behindWindow)
 
-            LinearGradient(
-                colors: [
-                    Color(red: 0.30, green: 0.32, blue: 0.42).opacity(0.36),
-                    Color(red: 0.12, green: 0.22, blue: 0.22).opacity(0.30),
-                    Color.black.opacity(0.08)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            if colorScheme == .dark {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.30, green: 0.32, blue: 0.42).opacity(0.36),
+                        Color(red: 0.12, green: 0.22, blue: 0.22).opacity(0.30),
+                        Color.black.opacity(0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
 
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("FaceGate")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.primary)
                         Text("Settings")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.48))
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding(.top, 34)
@@ -109,7 +112,7 @@ private struct CodexSettingsSidebar: View {
 
                 Text("Preferences")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.38))
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 14)
                     .padding(.bottom, 8)
 
@@ -134,7 +137,7 @@ private struct CodexSettingsSidebar: View {
                             .foregroundColor(.blue)
                             .frame(width: 28, height: 28)
                             .background(Circle().fill(Color(nsColor: .controlBackgroundColor)))
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+                            .overlay(Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
                             .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                     }
                     .buttonStyle(.plain)
@@ -146,7 +149,7 @@ private struct CodexSettingsSidebar: View {
                             .foregroundColor(.orange)
                             .frame(width: 28, height: 28)
                             .background(Circle().fill(Color(nsColor: .controlBackgroundColor)))
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+                            .overlay(Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
                             .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                     }
                     .buttonStyle(.plain)
@@ -158,7 +161,7 @@ private struct CodexSettingsSidebar: View {
                             .foregroundColor(.red)
                             .frame(width: 28, height: 28)
                             .background(Circle().fill(Color(nsColor: .controlBackgroundColor)))
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+                            .overlay(Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
                             .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                     }
                     .buttonStyle(.plain)
@@ -186,7 +189,7 @@ private struct CodexSettingsSidebar: View {
         }
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(Color.white.opacity(0.08))
+                .fill(Color.primary.opacity(0.08))
                 .frame(width: 1)
         }
     }
@@ -231,13 +234,13 @@ private struct CodexSidebarRow: View {
 
                 Spacer()
             }
-            .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.70))
+            .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.70))
             .padding(.horizontal, 9)
             .frame(height: 38)
             .background {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 7)
-                        .fill(Color.white.opacity(0.11))
+                        .fill(Color.primary.opacity(0.11))
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 7))
@@ -256,10 +259,10 @@ private struct SettingsDetailPane: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(selectedTab.rawValue)
                         .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.94))
+                        .foregroundStyle(.primary)
                     Text(selectedTab.description)
                         .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.48))
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
@@ -269,7 +272,7 @@ private struct SettingsDetailPane: View {
             .padding(.bottom, 18)
 
             Divider()
-                .overlay(Color.white.opacity(0.07))
+                .overlay(Color.primary.opacity(0.07))
 
             selectedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -314,6 +317,6 @@ private struct CodexSidebarVisualEffect: NSViewRepresentable {
 }
 
 private extension Color {
-    static let codexWindowBackground = Color(red: 0.075, green: 0.075, blue: 0.073)
+    static let codexWindowBackground = Color(nsColor: .windowBackgroundColor)
 }
 

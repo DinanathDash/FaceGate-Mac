@@ -1,7 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "ThemeClassic.png",
+      "filename" : "ClassicLight.png",
+      "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "ClassicDark.png",
       "idiom" : "universal"
     }
   ],

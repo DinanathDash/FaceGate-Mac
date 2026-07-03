@@ -28,7 +28,7 @@ struct SetupView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectBackground(material: .hudWindow, blendingMode: .behindWindow)
+            VisualEffectBackground(material: .windowBackground, blendingMode: .behindWindow)
                 .ignoresSafeArea()
                 
             VStack(spacing: 0) {
@@ -297,7 +297,7 @@ struct SetupView: View {
                 Image(nsImage: NSApplication.shared.applicationIconImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 14, height: 14)
+                    .frame(width: 28, height: 28)
                 Image(systemName: "arrow.right")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)

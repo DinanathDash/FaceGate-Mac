@@ -244,6 +244,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.titlebarSeparatorStyle = .none
         window.isMovableByWindowBackground = false
         window.level = .floating
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.contentView = NSHostingView(rootView: setupView)
         if let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main {
             let x = screen.frame.origin.x + (screen.frame.width - window.frame.width) / 2

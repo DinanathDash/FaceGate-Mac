@@ -24,9 +24,9 @@ struct SettingsView: View {
     
     private func forceWindowAppearance() {
         DispatchQueue.main.async {
-            NSApp.appearance = currentTheme == .classic ? NSAppearance(named: .darkAqua) : nil
+            NSApp.appearance = nil
             for window in NSApp.windows where window.title == "Settings" || String(describing: type(of: window)) == "SettingsWindow" {
-                window.appearance = currentTheme == .classic ? NSAppearance(named: .darkAqua) : nil
+                window.appearance = nil
                 window.contentView?.needsDisplay = true
                 window.displayIfNeeded()
             }

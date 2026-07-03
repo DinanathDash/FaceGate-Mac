@@ -48,12 +48,10 @@ struct AuthOverlayView: View {
     var body: some View {
         ZStack {
             // Dark blurred background.
-            VisualEffectBackground(material: .fullScreenUI, blendingMode: .behindWindow)
+            VisualEffectBackground(material: .windowBackground, blendingMode: .behindWindow)
                 .ignoresSafeArea()
 
-            // Semi-transparent dark overlay for extra dimming.
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
+            // Semi-transparent dark overlay removed to support light mode
 
             // Content.
             VStack(spacing: 0) {
@@ -70,12 +68,12 @@ struct AuthOverlayView: View {
 
                 Text("FaceGate")
                     .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(.primary.opacity(0.5))
                     .padding(.bottom, 8)
 
                 Text(isAppLocking ? "\(appName) is Locked" : appName)
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                     .padding(.bottom, 6)
 
                 if isTimedOut {
@@ -85,7 +83,7 @@ struct AuthOverlayView: View {
                 } else {
                     Text(subtitleMessage ?? (isAppLocking ? "Authenticate to unlock this app" : "Authenticate to proceed"))
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(.primary.opacity(0.6))
                 }
 
                 // Gap
@@ -146,10 +144,10 @@ struct AuthOverlayView: View {
                     } else if authManager.authState != .success && !faceAuthManager.statusMessage.isEmpty && authManager.isFaceUnlockAvailable && !showFallbacks && !showPasswordField && !isTimedOut && !isAuthenticatingWithTouchID {
                         Text(faceAuthManager.statusMessage)
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)
-                            .background(Capsule().fill(Color.white.opacity(0.12)))
+                            .background(Capsule().fill(Color.primary.opacity(0.12)))
                     } else if authManager.authState != .idle {
                         authFeedbackView
                     } else {
@@ -172,7 +170,7 @@ struct AuthOverlayView: View {
                         VStack(spacing: 12) {
                             Text("— or authenticate with —")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.4))
+                                .foregroundColor(.primary.opacity(0.4))
                             
                             HStack(spacing: 16) {
                                 if isAuthenticatingWithTouchID {
@@ -208,7 +206,7 @@ struct AuthOverlayView: View {
                 }) {
                     Text(cancelButtonTitle)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.4))
+                        .foregroundColor(.primary.opacity(0.4))
                 }
                 .buttonStyle(.plain)
                 .focusable(false)
@@ -341,13 +339,13 @@ struct AuthOverlayView: View {
             .frame(width: 80, height: 50)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white.opacity(0.08))
+                    .fill(Color.primary.opacity(0.08))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
             )
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(.primary.opacity(0.7))
         }
         .buttonStyle(.plain)
         .focusable(false)
@@ -368,7 +366,7 @@ struct AuthOverlayView: View {
                         .colorScheme(.dark)
                     Text("Authenticating with \(method.displayName)")
                         .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.primary.opacity(0.7))
                 }
             }
         case .success:
@@ -461,9 +459,9 @@ struct AuthOverlayView: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
                     )
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(.primary.opacity(0.8))
                 }
                 .buttonStyle(.plain)
                 .focusable(false)
@@ -482,13 +480,13 @@ struct AuthOverlayView: View {
                     .frame(height: 44)
                     .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.white.opacity(0.12))
+                            .fill(Color.primary.opacity(0.12))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                            .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
                     )
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                 }
                 .buttonStyle(.plain)
                 .focusable(false)
@@ -506,13 +504,13 @@ struct AuthOverlayView: View {
                 .frame(height: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.white.opacity(0.08))
+                        .fill(Color.primary.opacity(0.08))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
                 )
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(.primary.opacity(0.8))
             }
             .buttonStyle(.plain)
             .focusable(false)
@@ -528,16 +526,16 @@ struct AuthOverlayView: View {
                 .focused($isPasswordFocused)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .multilineTextAlignment(.leading)
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.white.opacity(0.1))
+                        .fill(Color.primary.opacity(0.1))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                        .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
                 )
                 .offset(x: shakePassword ? -8 : 0)
                 .animation(
@@ -554,7 +552,7 @@ struct AuthOverlayView: View {
             Button(action: submitPassword) {
                 Text("Unlock")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
                     .background(
@@ -572,7 +570,7 @@ struct AuthOverlayView: View {
             VStack(spacing: 12) {
                 Text("— or authenticate with —")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.4))
+                    .foregroundColor(.primary.opacity(0.4))
                     .padding(.top, 8)
                 
                 HStack(spacing: 16) {
