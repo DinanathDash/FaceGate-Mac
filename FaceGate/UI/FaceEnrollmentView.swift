@@ -88,8 +88,9 @@ struct FaceEnrollmentView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16))
 
                     FaceGuideOverlay(
-                        faceDetected: enrollmentManager.capturedCount > 0,
-                        quality: enrollmentManager.currentQuality
+                        faceDetected: enrollmentManager.isFaceDetected,
+                        quality: enrollmentManager.currentQuality,
+                        isError: enrollmentManager.isFaceOffCenter
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 

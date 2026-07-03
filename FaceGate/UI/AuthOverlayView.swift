@@ -255,7 +255,9 @@ struct AuthOverlayView: View {
             // Scanning animation overlay.
             ScanningAnimation(
                 isScanning: faceAuthManager.state == .scanning,
-                isMatched: faceAuthManager.state == .matched
+                isMatched: faceAuthManager.state == .matched,
+                isError: faceAuthManager.isFaceOffCenter,
+                isFaceDetected: faceAuthManager.isFaceDetected
             )
 
             // Liveness direction indicator overlay.

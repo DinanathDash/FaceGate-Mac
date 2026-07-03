@@ -8,6 +8,9 @@ struct FaceGuideOverlay: View {
 
     /// Quality of the current detection (0.0–1.0), affects border color intensity.
     var quality: Float = 0
+    
+    /// Whether there is an error such as the face being off-center.
+    var isError: Bool = false
 
     @State private var pulseScale: CGFloat = 1.0
     @State private var borderOpacity: Double = 0.6
@@ -43,10 +46,12 @@ struct FaceGuideOverlay: View {
                 // Oval border.
                 Ellipse()
                     .stroke(
-                        faceDetected
-                            ? Color.green.opacity(borderOpacity)
-                            : Color.white.opacity(borderOpacity * 0.6),
-                        lineWidth: faceDetected ? 3 : 2
+                        isError
+                            ? Color.red.opacity(borderOpacity)
+                            : (faceDetected
+                                ? Color.green.opacity(borderOpacity)
+                                : Color.white.opacity(borderOpacity * 0.6)),
+                        lineWidth: faceDetected || isError ? 3 : 2
                     )
                     .frame(width: ovalWidth, height: ovalHeight)
                     .position(center)
@@ -56,14 +61,20 @@ struct FaceGuideOverlay: View {
         .allowsHitTesting(false)  // Don't intercept touches.
         .onAppear {
             withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                pulseScale = faceDetected ? 1.0 : 1.02
-                borderOpacity = faceDetected ? 0.9 : 0.4
+                pulseScale = faceDetected || isError ? 1.0 : 1.02
+                borderOpacity = faceDetected || isError ? 0.9 : 0.4
             }
         }
         .onChangeCompat(of: faceDetected) { detected in
             withAnimation(.easeInOut(duration: 0.3)) {
-                pulseScale = detected ? 1.0 : 1.02
-                borderOpacity = detected ? 0.9 : 0.4
+                pulseScale = detected || isError ? 1.0 : 1.02
+                borderOpacity = detected || isError ? 0.9 : 0.4
+            }
+        }
+        .onChangeCompat(of: isError) { error in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                pulseScale = faceDetected || error ? 1.0 : 1.02
+                borderOpacity = faceDetected || error ? 0.9 : 0.4
             }
         }
     }
