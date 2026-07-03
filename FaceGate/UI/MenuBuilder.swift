@@ -217,7 +217,9 @@ class MenuBuilder: NSObject, NSMenuDelegate {
     @objc private func quitApplication() {
         let appDelegate = AppDelegate.shared
         let isSettingsOpen = appDelegate?.isSettingsWindowVisible ?? false
-        if isSettingsOpen {
+        let setupCompleted = UserDefaults.standard.bool(forKey: FGConstants.setupCompletedKey)
+        
+        if isSettingsOpen || !setupCompleted {
             NSApplication.shared.terminate(nil)
         } else {
             ActionAuthWindow.show(reason: "Quit FaceGate") {

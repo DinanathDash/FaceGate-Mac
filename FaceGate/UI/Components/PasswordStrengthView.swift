@@ -68,7 +68,7 @@ struct PasswordStrengthView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(Color.secondary.opacity(0.15))
         )
     }
 }

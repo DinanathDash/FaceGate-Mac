@@ -3,7 +3,7 @@ import SwiftUI
 import Sparkle
 
 /// AppDelegate for AppKit bridging — handles lifecycle events that SwiftUI can't.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     static private(set) var shared: AppDelegate?
 
     override init() {
@@ -98,6 +98,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSNotification.Name("com.apple.screenIsLocked"),
             object: nil
         )
+
+        // Intercept the default SwiftUI Settings shortcut (Cmd+,)
+        // so it opens our custom SettingsWindow instead of the default blank SwiftUI Settings scene.
+        DispatchQueue.main.async {
+            if let menu = NSApp.mainMenu {
+                for item in menu.items {
+                    if let submenu = item.submenu {
+                        for subitem in submenu.items {
+                            if subitem.keyEquivalent == "," {
+                                subitem.target = self
+                                subitem.action = #selector(self.openSettingsWindow)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     var isAuthorizedToQuit = false
@@ -216,7 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -228,21 +245,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isMovableByWindowBackground = false
         window.level = .floating
         window.contentView = NSHostingView(rootView: setupView)
-        if let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) {
-            let x = screen.frame.midX - window.frame.width / 2
-            let y = screen.frame.midY - window.frame.height / 2
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main {
+            let x = screen.frame.origin.x + (screen.frame.width - window.frame.width) / 2
+            let y = screen.frame.origin.y + (screen.frame.height - window.frame.height) / 2
             window.setFrameOrigin(NSPoint(x: x, y: y))
-        } else {
-            window.center()
         }
         
         window.isReleasedWhenClosed = false
+        window.delegate = self
         
         window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
         setupWindow = window
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        if window == setupWindow {
+            setupWindow = nil
+            // Optionally, post a notification to tell FaceEnrollmentView to explicitly cancel
+            NotificationCenter.default.post(name: NSNotification.Name("SetupWindowWillClose"), object: nil)
+        }
     }
 
     // MARK: - Sleep / Lock Handling

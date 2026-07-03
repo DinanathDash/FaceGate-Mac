@@ -6,7 +6,7 @@ struct PasswordField: View {
     @Binding var text: String
     var showToggle: Bool = true
 
-    @State private var isSecure: Bool = true
+    @Binding var isSecure: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -33,7 +33,7 @@ struct PasswordField: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(Color.secondary.opacity(0.15))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)

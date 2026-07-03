@@ -48,17 +48,17 @@ struct FaceEnrollmentView: View {
                     )
 
                 Text("Face Enrollment")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(.title.bold())
 
                 Text(staticStatusMessage)
-                    .font(.system(size: 12))
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 300)
 
                 if !isAddingFace && !isInSettings {
                     Text("You can add up to 3 faces from Settings")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.blue.opacity(0.85))
                         .multilineTextAlignment(.center)
                         .padding(.top, 2)
@@ -70,7 +70,7 @@ struct FaceEnrollmentView: View {
             // Warning message (above the video screen)
             VStack(spacing: 2) {
                 Text(enrollmentManager.warningMessage)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.caption)
                     .foregroundColor(.red.opacity(0.8))
                     .multilineTextAlignment(.center)
                     .frame(height: 20)
@@ -121,10 +121,10 @@ struct FaceEnrollmentView: View {
                         total: Double(enrollmentManager.targetFrameCount)
                     )
                     .progressViewStyle(.linear)
-                    .tint(Color(hue: 0.58, saturation: 0.6, brightness: 0.85))
+                    .tint(.accentColor)
 
                     Text("\(enrollmentManager.capturedCount) of \(enrollmentManager.targetFrameCount) captures")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 40)
@@ -143,12 +143,13 @@ struct FaceEnrollmentView: View {
             checkCameraAndStart()
         }
         .onDisappear {
-            // If the window is closed before enrollment finishes (e.g. user clicks
-            // the close button mid-capture), cancel enrollment so the camera stops
-            // and display brightness is restored to its original value.
-            if enrollmentManager.state == .capturing || enrollmentManager.state == .processing {
-                enrollmentManager.cancelEnrollment()
-            }
+            // Always cancel enrollment when disappearing
+            enrollmentManager.cancelEnrollment()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SetupWindowWillClose"))) { _ in
+            // Handle the case where the user closes the setup window via the red traffic light button.
+            // AppKit window closing sometimes prevents SwiftUI onDisappear from firing immediately.
+            enrollmentManager.cancelEnrollment()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             guard enrollmentManager.state == .idle else { return }
@@ -189,26 +190,20 @@ struct FaceEnrollmentView: View {
                 .foregroundColor(.red.opacity(0.8))
 
             Text("Camera Access Denied")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.headline)
                 .foregroundColor(.white)
 
             Text("FaceGate needs camera access to enroll your face. Please enable it in System Settings.")
-                .font(.system(size: 11))
+                .font(.subheadline)
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
 
-            Button {
+            Button("Open System Settings") {
                 CameraManager.openSystemSettings()
-            } label: {
-                Text("Open System Settings")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(Color.blue))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         }
     }
 
@@ -219,7 +214,7 @@ struct FaceEnrollmentView: View {
             ProgressView()
                 .scaleEffect(1.5)
             Text("Processing face data")
-                .font(.system(size: 13))
+                .font(.subheadline)
                 .foregroundColor(.white.opacity(0.8))
         }
     }
@@ -230,10 +225,10 @@ struct FaceEnrollmentView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.green)
             Text("Face Enrolled!")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.headline)
                 .foregroundColor(.white)
             Text("\(enrollmentManager.capturedCount) reference captures saved")
-                .font(.system(size: 12))
+                .font(.subheadline)
                 .foregroundColor(.white.opacity(0.6))
         }
     }
@@ -244,10 +239,10 @@ struct FaceEnrollmentView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.red)
             Text("Enrollment Failed")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.headline)
                 .foregroundColor(.white)
             Text(message)
-                .font(.system(size: 12))
+                .font(.subheadline)
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
         }
@@ -303,26 +298,19 @@ struct FaceEnrollmentView: View {
     // MARK: - Button Styles
 
     private func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 200, height: 38)
-                .background(
-                    Capsule()
-                        .fill(Color.blue)
-                )
-        }
-        .buttonStyle(.plain)
+        Button(title, action: action)
+            .buttonStyle(.borderedProminent)
+            .tint(.accentColor)
+            .controlSize(.large)
+            .frame(minWidth: 120)
     }
 
     private func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.secondary)
-        }
-        .buttonStyle(.plain)
+        Button(title, action: action)
+            .buttonStyle(.plain)
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .padding(.vertical, 8)
     }
 
     @ViewBuilder

@@ -8,6 +8,7 @@ struct SetupView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var passwordError: String?
+    @State private var isPasswordSecure = true
     @State private var accessibilityGranted = false
 
     /// Called when setup is complete.
@@ -27,24 +28,10 @@ struct SetupView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectBackground(material: .windowBackground, blendingMode: .behindWindow)
+            VisualEffectBackground(material: .hudWindow, blendingMode: .behindWindow)
                 .ignoresSafeArea()
                 
             VStack(spacing: 0) {
-                // Progress indicator.
-                HStack(spacing: 8) {
-                    ForEach(SetupStep.allCases, id: \.rawValue) { step in
-                        Capsule()
-                            .fill(step.rawValue <= currentStep.rawValue
-                                  ? Color(hue: 0.58, saturation: 0.6, brightness: 0.85)
-                                  : Color(nsColor: .separatorColor))
-                            .frame(height: 3)
-                    }
-                }
-                .padding(.horizontal, 40)
-                .padding(.top, 40)
-                .padding(.bottom, 8)
-
                 // Step content.
                 Group {
                     switch currentStep {
@@ -64,9 +51,21 @@ struct SetupView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .animation(.easeInOut(duration: 0.3), value: currentStep)
+
+                // Progress indicator.
+                HStack(spacing: 8) {
+                    ForEach(SetupStep.allCases, id: \.rawValue) { step in
+                        Circle()
+                            .fill(step.rawValue <= currentStep.rawValue
+                                  ? Color.accentColor
+                                  : Color.secondary.opacity(0.3))
+                            .frame(width: 8, height: 8)
+                    }
+                }
+                .padding(.bottom, 24)
             }
         }
-        .frame(width: 560, height: 620)
+        .frame(width: 500, height: 560)
     }
 
     // MARK: - Steps
@@ -90,10 +89,10 @@ struct SetupView: View {
 
             VStack(spacing: 8) {
                 Text("Welcome to FaceGate")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(.largeTitle.bold())
 
                 Text("Lock your apps. Unlock with your face.")
-                    .font(.system(size: 14))
+                    .font(.title3)
                     .foregroundColor(.secondary)
             }
 
@@ -110,8 +109,9 @@ struct SetupView: View {
             setupButton("Get Started") {
                 currentStep = .permissions
             }
-            .padding(.bottom, 30)
+            .padding(.bottom, 16)
         }
+        .padding(.top, 30)
     }
 
     private var permissionsStep: some View {
@@ -119,10 +119,10 @@ struct SetupView: View {
             Spacer()
 
             Text("Permissions")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.title.bold())
 
             Text("FaceGate needs these permissions to protect your apps.")
-                .font(.system(size: 13))
+                .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
@@ -150,15 +150,15 @@ struct SetupView: View {
 
             HStack(spacing: 12) {
                 Button("Back") { currentStep = .welcome }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
+                    .controlSize(.large)
 
                 setupButton("Continue") {
                     currentStep = .faceEnrollment
                 }
             }
-            .padding(.bottom, 30)
+            .padding(.bottom, 16)
         }
+        .padding(.top, 30)
         .onAppear {
             checkAccessibility()
         }
@@ -183,29 +183,30 @@ struct SetupView: View {
                 isInSettings: false
             )
         }
+        .padding(.top, 10)
+        .padding(.bottom, 10)
     }
 
     private var passwordStep: some View {
         VStack(spacing: 20) {
-            Spacer()
 
             Image(systemName: "key.fill")
                 .font(.system(size: 36))
                 .foregroundColor(.orange)
 
             Text("Set App Password")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.title.bold())
 
             Text("This password is your emergency access method.\nYou'll use it if Face Unlock or Touch ID are unavailable.")
-                .font(.system(size: 13))
+                .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
 
             VStack(spacing: 12) {
-                PasswordField(placeholder: "Choose a password", text: $password)
+                PasswordField(placeholder: "Choose a password", text: $password, isSecure: $isPasswordSecure)
                     .frame(maxWidth: 300)
-                PasswordField(placeholder: "Confirm password", text: $confirmPassword)
+                PasswordField(placeholder: "Confirm password", text: $confirmPassword, isSecure: $isPasswordSecure)
                     .frame(maxWidth: 300)
 
                 PasswordStrengthView(password: password)
@@ -217,47 +218,49 @@ struct SetupView: View {
                         .foregroundColor(.red)
                 }
             }
-
-            Spacer()
+            
+            // Reduced space between form and buttons by omitting Spacer()
 
             HStack(spacing: 12) {
                 Button("Back") { currentStep = .faceEnrollment }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
+                    .controlSize(.large)
 
                 setupButton("Set Password") {
                     savePassword()
                 }
             }
-            .padding(.bottom, 30)
+            .padding(.bottom, 16)
         }
+        .padding(.top, 30)
     }
 
     private var selectAppsStep: some View {
         VStack(spacing: 12) {
             Text("Select Apps to Lock")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.title.bold())
                 .padding(.top, 20)
 
             Text("Choose which apps require authentication to open.")
-                .font(.system(size: 13))
+                .font(.body)
                 .foregroundColor(.secondary)
 
             AppPickerView()
                 .frame(maxHeight: .infinity)
                 .padding(.horizontal, 40)
 
+            Spacer()
+
             HStack(spacing: 12) {
                 Button("Back") { currentStep = .setPassword }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
+                    .controlSize(.large)
 
                 setupButton("Finish Setup") {
                     currentStep = .complete
                 }
             }
-            .padding(.bottom, 20)
+            .padding(.bottom, 16)
         }
+        .padding(.top, 20)
     }
 
     private var completeStep: some View {
@@ -269,23 +272,23 @@ struct SetupView: View {
                 .foregroundColor(.green)
 
             Text("You're All Set!")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .font(.largeTitle.bold())
 
             VStack(spacing: 4) {
                 let faceEnrolled = UserDefaults.standard.bool(forKey: FGConstants.faceEnrolledKey)
                 if faceEnrolled {
                     Text("Face Unlock enrolled and enabled")
-                        .font(.system(size: 12))
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                 } else {
                     Text("Face Unlock not enrolled (you can set it up later in Settings)")
-                        .font(.system(size: 12))
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
             }
 
             Text("FaceGate is now protecting your apps.\nLook for the shield icon in your menu bar.")
-                .font(.system(size: 13))
+                .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
@@ -305,7 +308,7 @@ struct SetupView: View {
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .fill(Color.secondary.opacity(0.15))
             )
 
             Spacer()
@@ -320,12 +323,12 @@ struct SetupView: View {
                     finalizeSetup()
                     onOpenSettings?()
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(.blue)
-                .font(.system(size: 13))
+                .buttonStyle(.link)
+                .font(.body)
             }
-            .padding(.bottom, 30)
+            .padding(.bottom, 16)
         }
+        .padding(.top, 30)
     }
 
     // MARK: - Helpers
@@ -349,17 +352,10 @@ struct SetupView: View {
     }
 
     private func setupButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 200, height: 38)
-                .background(
-                    Capsule()
-                        .fill(Color.blue)
-                )
-        }
-        .buttonStyle(.plain)
+        Button(title, action: action)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .frame(minWidth: 120)
     }
 
     private func savePassword() {
@@ -426,9 +422,9 @@ private struct FeatureRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.headline)
                 Text(subtitle)
-                    .font(.system(size: 11))
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
             }
         }
@@ -451,9 +447,9 @@ private struct PermissionRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.headline)
                 Text(description)
-                    .font(.system(size: 11))
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
             }
 
@@ -473,13 +469,13 @@ private struct PermissionRow: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(Color(nsColor: .controlBackgroundColor)))
+                    .background(Capsule().fill(Color.secondary.opacity(0.15)))
             }
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(Color.secondary.opacity(0.15))
         )
     }
 }

@@ -52,27 +52,12 @@ private struct LockedAppSheetView: View {
             Divider()
             
             // Content
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Custom Session Timer")
-                            .font(.system(size: 13))
-                        Spacer()
-                        Toggle("", isOn: $hasCustomTimer)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .controlSize(.small)
-                    }
+            Form {
+                Section {
+                    Toggle("Custom Session Timer for this app", isOn: $hasCustomTimer)
+                        .toggleStyle(.switch)
                     
-                    Text("Override the global timer for this specific app.")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                
-                if hasCustomTimer {
-                    VStack(alignment: .leading, spacing: 8) {
+                    if hasCustomTimer {
                         HStack {
                             Text("Timer Duration")
                                 .font(.system(size: 13))
@@ -107,7 +92,6 @@ private struct LockedAppSheetView: View {
                                     Text("From last unlock").tag(1)
                                     Text("From when app loses focus").tag(2)
                                 }
-                                .pickerStyle(.menu)
                                 .frame(width: 200)
                             }
                             
@@ -141,18 +125,23 @@ private struct LockedAppSheetView: View {
                                 }
                             }
                         }
+                    } else {
+                        let globalTimeout = SessionManager.shared.sessionTimeout / 60
+                        let timeString = globalTimeout == 0 ? "Immediately" : (globalTimeout == FGConstants.indefiniteSliderValue ? "Never" : "\(Int(globalTimeout)) min")
+                        Text("Using Global Timer (\(timeString))")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                } else {
-                    let globalTimeout = SessionManager.shared.sessionTimeout / 60
-                    let timeString = globalTimeout == 0 ? "Immediately" : (globalTimeout == FGConstants.indefiniteSliderValue ? "Never" : "\(Int(globalTimeout)) min")
-                    Text("Using Global Timer (\(timeString))")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
+                } header: {
+                    Text("Session Timer")
+                } footer: {
+                    Text("If enabled, this app will have its own timer rules overriding the global behavior settings.")
                 }
             }
-            .padding(20)
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
             
             Spacer()
             
