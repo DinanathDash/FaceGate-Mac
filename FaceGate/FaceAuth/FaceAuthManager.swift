@@ -11,6 +11,8 @@ final class FaceAuthManager: ObservableObject {
     @Published var state: FaceAuthState = .idle
     @Published var statusMessage: String = ""
     @Published var warningMessage: String = ""
+    @Published var isFaceOffCenter: Bool = false
+    @Published var isFaceDetected: Bool = false
 
     /// The camera manager — exposed for binding the preview layer.
     let cameraManager = CameraManager()
@@ -153,6 +155,8 @@ final class FaceAuthManager: ObservableObject {
         state = .scanning
         statusMessage = "Looking for your face…"
         warningMessage = ""
+        isFaceOffCenter = false
+        isFaceDetected = false
         activeChallenge = nil
 
         cameraManager.onFrameCaptured = { [weak self] pixelBuffer in
@@ -182,6 +186,8 @@ final class FaceAuthManager: ObservableObject {
         state = .idle
         statusMessage = ""
         warningMessage = ""
+        isFaceOffCenter = false
+        isFaceDetected = false
         enrolledEmbeddings = []
         onResult = nil
     }
@@ -201,17 +207,25 @@ final class FaceAuthManager: ObservableObject {
         guard frameCount % processEveryNFrames == 0 else { return }
         guard state == .scanning else { return }
 
-        faceDetector.detectFaces(in: pixelBuffer) { [weak self] observations in
+        faceDetector.detectFaces(in: pixelBuffer) { [weak self] observations, hasOffCenterFace in
             guard let self = self else { return }
 
             // We need exactly one face for security.
             guard observations.count == 1, let face = observations.first else {
                 DispatchQueue.main.async {
-                    if observations.isEmpty {
+                    if hasOffCenterFace {
+                        self.warningMessage = "Please center your face"
+                        self.isFaceOffCenter = true
+                        self.isFaceDetected = true
+                    } else if observations.isEmpty {
                         self.statusMessage = "Looking for your face…"
                         self.warningMessage = ""
+                        self.isFaceOffCenter = false
+                        self.isFaceDetected = false
                     } else {
                         self.warningMessage = "Only one face allowed"
+                        self.isFaceOffCenter = false
+                        self.isFaceDetected = true
                     }
                 }
                 return
@@ -219,6 +233,8 @@ final class FaceAuthManager: ObservableObject {
 
             DispatchQueue.main.async {
                 self.warningMessage = ""
+                self.isFaceOffCenter = false
+                self.isFaceDetected = true
             }
 
             // Crop the face.

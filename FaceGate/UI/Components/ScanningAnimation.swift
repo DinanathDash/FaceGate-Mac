@@ -8,6 +8,12 @@ struct ScanningAnimation: View {
 
     /// Whether a face match was found (triggers success animation).
     var isMatched: Bool = false
+    
+    /// Whether there is an error such as the face being off-center.
+    var isError: Bool = false
+
+    /// Whether a face is detected (turns the scanning ring green).
+    var isFaceDetected: Bool = false
 
     @State private var rotation: Double = 0
     @State private var lineOffset: CGFloat = -1
@@ -31,7 +37,11 @@ struct ScanningAnimation: View {
 
     private var scanningView: some View {
         Circle()
-            .stroke(Color.white.opacity(0.3), lineWidth: 2)
+            .stroke(
+                isError ? Color.red.opacity(0.8) : 
+                (isFaceDetected ? Color.green.opacity(0.6) : Color.white.opacity(0.3)), 
+                lineWidth: isError || isFaceDetected ? 3 : 2
+            )
             .padding(15)
     }
 

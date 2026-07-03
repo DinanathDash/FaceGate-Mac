@@ -11,6 +11,8 @@ final class FaceEnrollmentManager: ObservableObject {
     @Published var currentQuality: Float = 0
     @Published var statusMessage: String = "Position your face in the frame"
     @Published var warningMessage: String = ""
+    @Published var isFaceOffCenter: Bool = false
+    @Published var isFaceDetected: Bool = false
     var isAddingFace: Bool = false
 
     /// Target number of frames to capture.
@@ -77,6 +79,8 @@ final class FaceEnrollmentManager: ObservableObject {
         state = .capturing
         statusMessage = "Look straight at the camera"
         warningMessage = ""
+        isFaceOffCenter = false
+        isFaceDetected = false
 
         cameraManager.onFrameCaptured = { [weak self] pixelBuffer in
             self?.processEnrollmentFrame(pixelBuffer)
@@ -94,6 +98,8 @@ final class FaceEnrollmentManager: ObservableObject {
         capturedCount = 0
         statusMessage = "Enrollment cancelled"
         warningMessage = ""
+        isFaceOffCenter = false
+        isFaceDetected = false
     }
 
     /// Re-enroll: delete existing data and start fresh.
@@ -110,16 +116,24 @@ final class FaceEnrollmentManager: ObservableObject {
         guard framesSinceLastCapture >= captureInterval else { return }
         guard state == .capturing else { return }
 
-        faceDetector.detectFacesWithQuality(in: pixelBuffer) { [weak self] results in
+        faceDetector.detectFacesWithQuality(in: pixelBuffer) { [weak self] results, hasOffCenterFace in
             guard let self = self else { return }
 
             // Must detect exactly one face.
             guard results.count == 1 else {
                 DispatchQueue.main.async {
-                    if results.isEmpty {
+                    if hasOffCenterFace {
+                        self.warningMessage = "Please center your face"
+                        self.isFaceOffCenter = true
+                        self.isFaceDetected = true
+                    } else if results.isEmpty {
                         self.warningMessage = "No face detected — look at the camera"
+                        self.isFaceOffCenter = false
+                        self.isFaceDetected = false
                     } else {
                         self.warningMessage = "Multiple faces detected — only one face allowed"
+                        self.isFaceOffCenter = false
+                        self.isFaceDetected = true
                     }
                 }
                 return
@@ -130,6 +144,8 @@ final class FaceEnrollmentManager: ObservableObject {
             DispatchQueue.main.async {
                 self.currentQuality = quality
                 self.warningMessage = ""
+                self.isFaceOffCenter = false
+                self.isFaceDetected = true
             }
 
             // Reject low-quality captures.
