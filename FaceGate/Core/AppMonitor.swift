@@ -24,7 +24,20 @@ final class AppMonitor: ObservableObject {
     /// Cooldown to prevent re-lock loop right after unlock (used for "lock immediately" mode).
     private var recentlyUnlocked: [String: Date] = [:]
 
+    /// Tracks the currently blocked app to avoid re-entrant access to AppLocker.currentlyBlockedApp.
+    private var blockedApp: String?
+
     private init() {}
+
+    /// Called by AppLocker when an app is blocked.
+    func didBlockApp(_ bundleId: String) {
+        blockedApp = bundleId
+    }
+
+    /// Called by AppLocker when an app is unblocked or switched away.
+    func didUnblockApp() {
+        blockedApp = nil
+    }
 
     /// Record that an app was just unlocked (starts a 1-second cooldown against re-lock).
     func recordUnlock(for bundleIdentifier: String) {
@@ -117,7 +130,7 @@ final class AppMonitor: ObservableObject {
         guard let bundleId = app.bundleIdentifier else { return }
 
         // If we are currently blocking an app...
-        if let blockedApp = AppLocker.shared.currentlyBlockedApp {
+        if let blockedApp = blockedApp {
             if bundleId == blockedApp {
                 // If the user activated the blocked app, bring overlays back to front.
                 AppLocker.shared.bringOverlaysToFront()

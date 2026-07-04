@@ -41,6 +41,7 @@ final class AppLocker: ObservableObject {
 
         currentlyBlockedApp = bundleIdentifier
         blockedRunningApp = runningApp
+        appMonitor.didBlockApp(bundleIdentifier)
 
         // Step 1: Immediately hide the locked app if in Full Screen mode.
         let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
@@ -73,6 +74,7 @@ final class AppLocker: ObservableObject {
         // Clear state BEFORE activate to prevent re-block during activation notification.
         currentlyBlockedApp = nil
         blockedRunningApp = nil
+        appMonitor.didUnblockApp()
 
         let action = onUnlockAction
         onUnlockAction = nil
@@ -116,6 +118,7 @@ final class AppLocker: ObservableObject {
         currentlyBlockedApp = nil
         blockedRunningApp = nil
         onUnlockAction = nil
+        appMonitor.didUnblockApp()
     }
 
     /// Dismiss all overlays without unlocking (e.g., if FaceGate is quitting).
@@ -227,6 +230,7 @@ final class AppLocker: ObservableObject {
         dismissOverlays()
         currentlyBlockedApp = nil
         blockedRunningApp = nil
+        appMonitor.didUnblockApp()
     }
 
     /// Bring existing overlay panels back to the front of the window stack.
