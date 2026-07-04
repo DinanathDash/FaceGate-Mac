@@ -155,6 +155,10 @@ final class AppLocker: ObservableObject {
 
         let appName = LockedAppsManager.shared.displayName(for: bundleIdentifier) ?? "Application"
         let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
+        
+        let screens = NSScreen.screens
+        let mouseLocation = NSEvent.mouseLocation
+        let activeScreen = screens.first { NSMouseInRect(mouseLocation, $0.frame, false) } ?? NSScreen.main ?? screens.first
 
         if overlayMode == 1, let app = blockedRunningApp {
             let windows = getAppWindowFrames(for: app.processIdentifier)
@@ -188,10 +192,6 @@ final class AppLocker: ObservableObject {
             }
         } else {
             // Present auth overlays on all screens.
-            let screens = NSScreen.screens
-            let mouseLocation = NSEvent.mouseLocation
-            let activeScreen = screens.first { NSMouseInRect(mouseLocation, $0.frame, false) } ?? NSScreen.main ?? screens.first
-
             for (index, screen) in screens.enumerated() {
                 let panel = AuthOverlayPanel(
                     screen: screen,
@@ -318,6 +318,12 @@ final class AppLocker: ObservableObject {
     /// Uses a slower background timer as fallback and NSWorkspace activation notifications
     /// for event-triggered re-alignment.
     private func startWindowAlignmentTimer(for pid: pid_t, appName: String, bundleIdentifier: String) {
+        // Remove any prior observer before registering a new one.
+        if let existing = windowActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(existing)
+            windowActivationObserver = nil
+        }
+
         // Register for activation notifications so we realign immediately when the user
         // switches back to the locked app, rather than waiting for the next timer tick.
         let center = NSWorkspace.shared.notificationCenter
@@ -381,6 +387,12 @@ final class AppLocker: ObservableObject {
         )
         panel.makeKeyAndOrderFront(nil)
         overlayPanels[0] = panel
+
+        // Remove any prior observer before registering a new one.
+        if let existing = windowActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(existing)
+            windowActivationObserver = nil
+        }
 
         // Register for the blocked app's activation to detect window creation.
         let center = NSWorkspace.shared.notificationCenter
