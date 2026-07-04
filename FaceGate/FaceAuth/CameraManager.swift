@@ -289,13 +289,6 @@ final class CameraManager: NSObject, ObservableObject {
         _ = setBrightness(displayID, 1.0)
     }
 
-    /// Restores the brightness that was saved in `saveBrightnessAndMaximize()`.
-    private func restoreBrightness() {
-        guard let saved = savedBrightness else { return }
-        savedBrightness = nil
-        CameraManager.setBrightness(saved)
-    }
-
     /// Sets display brightness to the given value. Static so it can be called from
     /// contexts where the CameraManager instance may already be deallocated.
     fileprivate static func setBrightness(_ value: Float) {

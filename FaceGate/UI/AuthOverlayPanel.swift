@@ -26,13 +26,8 @@ final class AuthOverlayPanel: NSPanel {
             defer: false
         )
 
-        // Panel configuration for maximum blocking.
-        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
-        if overlayMode == 1 {
-            self.level = .normal
-        } else {
-            self.level = .screenSaver
-        }
+        // Panel configuration for maximum blocking — use screenSaver level to stay above all app windows.
+        self.level = .screenSaver
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
@@ -80,12 +75,9 @@ final class AuthOverlayPanel: NSPanel {
             defer: false
         )
 
-        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
-        if overlayMode == 1 {
-            self.level = .normal
-        } else {
-            self.level = .screenSaver
-        }
+        // Use floating level so the overlay stays above the locked app's windows
+        // without going above the system menu bar (screenSaver level).
+        self.level = .floating
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
