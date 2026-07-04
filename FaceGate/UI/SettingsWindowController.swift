@@ -74,7 +74,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.titlebarSeparatorStyle = .none
         window.toolbarStyle = .automatic
         window.isMovableByWindowBackground = false
-        window.minSize = NSSize(width: 660, height: 500)
+        window.minSize = NSSize(width: 750, height: 540)
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]
         
         if let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main {

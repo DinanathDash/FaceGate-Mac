@@ -72,14 +72,17 @@ struct ModernSettingsView: View {
             SettingsDetailView(tab: activeTab)
         }
         .navigationTitle("Settings")
-        .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 750, minHeight: 540)
+        .navigationSplitViewStyle(.prominentDetail)
         .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                Button { goBack() } label: { Image(systemName: "chevron.left") }
-                .disabled(!canGoBack)
-                Button { goForward() } label: { Image(systemName: "chevron.right") }
-                .disabled(!canGoForward)
+            ToolbarItem(placement: .navigation) {
+                ControlGroup {
+                    Button { goBack() } label: { Image(systemName: "chevron.left") }
+                    .disabled(!canGoBack)
+                    
+                    Button { goForward() } label: { Image(systemName: "chevron.right") }
+                    .disabled(!canGoForward)
+                }
+                .controlGroupStyle(.navigation)
             }
         }
         .onChangeCompat(of: navigation.selectedTab) { _ in recordNavigation() }

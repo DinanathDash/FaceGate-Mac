@@ -61,8 +61,18 @@ struct ClassicSettingsView: View {
             }
             .animation(.spring(response: 0.28, dampingFraction: 0.86), value: chromeState.isSidebarCollapsed)
         }
-        .frame(minWidth: 750, minHeight: 540)
-        .toolbar(.hidden)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        chromeState.isSidebarCollapsed.toggle()
+                    }
+                }) {
+                    Image(systemName: "sidebar.left")
+                }
+                .help("Toggle Sidebar")
+            }
+        }
     }
 }
 
