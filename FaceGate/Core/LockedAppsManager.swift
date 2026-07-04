@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -96,6 +97,31 @@ final class LockedAppsManager: ObservableObject {
               let apps = try? JSONDecoder().decode([LockedApp].self, from: data) else {
             return
         }
+        
         lockedApps = apps
+        validateApps()
+    }
+    
+    /// Validates the locked apps list and removes any that have been deleted or moved to Trash.
+    func validateApps() {
+        let initialCount = lockedApps.count
+        lockedApps.removeAll { app in
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleIdentifier),
+                  FileManager.default.fileExists(atPath: url.path) else {
+                return true // remove
+            }
+            let lowerPath = url.path.lowercased()
+            if lowerPath.contains(".trash") || lowerPath.contains(".trashes") {
+                return true // remove
+            }
+            if !InstalledAppsScanner.shared.isValidAppURL(url) {
+                return true // remove
+            }
+            return false // keep
+        }
+        
+        if lockedApps.count != initialCount {
+            saveLockedApps()
+        }
     }
 }

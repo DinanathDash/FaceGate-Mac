@@ -24,7 +24,26 @@ final class InstalledAppsScanner {
 
     static let shared = InstalledAppsScanner()
 
+    private let customAppURLsKey = "FaceGate.CustomAppURLs"
+
     private init() {}
+    /// Checks if a given URL is within standard app directories or explicitly added custom URLs.
+    func isValidAppURL(_ url: URL) -> Bool {
+        let path = url.path
+        let searchPaths = [
+            "/Applications/",
+            "/System/Applications/",
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").path + "/"
+        ]
+        
+        for searchPath in searchPaths {
+            if path.hasPrefix(searchPath) {
+                return true
+            }
+        }
+        
+        return getCustomAppURLs().contains { $0.path == path }
+    }
 
     /// Scan for installed applications in standard directories.
     /// - Returns: Array of discovered apps sorted by display name.
@@ -41,7 +60,19 @@ final class InstalledAppsScanner {
             scanDirectory(searchPath, into: &apps, depth: 0, maxDepth: 2)
         }
 
-        // Filter out FaceGate itself and system daemons without UI.
+        var validCustomURLs: [URL] = []
+        for url in getCustomAppURLs() {
+            let lowerPath = url.path.lowercased()
+            if FileManager.default.fileExists(atPath: url.path) && !lowerPath.contains(".trash") && !lowerPath.contains(".trashes") {
+                if let app = createDiscoveredApp(from: url) {
+                    apps[app.bundleIdentifier] = app
+                    validCustomURLs.append(url)
+                }
+            }
+        }
+        // Remove any deleted custom apps from UserDefaults
+        saveCustomAppURLs(validCustomURLs)
+
         let excludedBundleIDs: Set<String> = [
             "com.dweep.FaceGate",
             "com.apple.finder",  // Finder can't meaningfully be locked
@@ -64,6 +95,27 @@ final class InstalledAppsScanner {
             iconData: iconData,
             isLocked: isLocked
         )
+    }
+
+    // MARK: - Custom Apps
+
+    /// Adds a custom application URL to be scanned.
+    func addCustomAppURL(_ url: URL) {
+        var customURLs = getCustomAppURLs()
+        if !customURLs.contains(url) {
+            customURLs.append(url)
+            saveCustomAppURLs(customURLs)
+        }
+    }
+
+    private func getCustomAppURLs() -> [URL] {
+        let strings = UserDefaults.standard.stringArray(forKey: customAppURLsKey) ?? []
+        return strings.map { URL(fileURLWithPath: $0) }
+    }
+
+    private func saveCustomAppURLs(_ urls: [URL]) {
+        let strings = urls.map { $0.path }
+        UserDefaults.standard.set(strings, forKey: customAppURLsKey)
     }
 
     // MARK: - Private
@@ -89,7 +141,7 @@ final class InstalledAppsScanner {
         }
     }
 
-    private func createDiscoveredApp(from appURL: URL) -> DiscoveredApp? {
+    func createDiscoveredApp(from appURL: URL) -> DiscoveredApp? {
         guard let bundle = Bundle(url: appURL),
               let bundleIdentifier = bundle.bundleIdentifier else {
             return nil

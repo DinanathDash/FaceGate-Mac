@@ -2,6 +2,7 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 import AVFoundation
+import UniformTypeIdentifiers
 
 final class SettingsChromeState: ObservableObject {
     @Published var isSidebarCollapsed = false
@@ -1303,10 +1304,13 @@ struct LockedAppsSettingsView: View {
     @State private var path = NavigationPath()
 
     private var filteredLockedApps: [LockedApp] {
-        if searchText.isEmpty {
-            return lockedAppsManager.lockedApps
+        let sorted = lockedAppsManager.lockedApps.sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }
-        return lockedAppsManager.lockedApps.filter {
+        if searchText.isEmpty {
+            return sorted
+        }
+        return sorted.filter {
             $0.displayName.localizedCaseInsensitiveContains(searchText) ||
             $0.bundleIdentifier.localizedCaseInsensitiveContains(searchText)
         }
@@ -1359,10 +1363,24 @@ struct LockedAppsSettingsView: View {
                 }
             }
             .onAppear {
-                loadAppsIfNeeded()
+                loadApps()
             }
             .onDisappear {
                 installedApps = []
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                if showingAddApps {
+                    loadApps()
+                } else {
+                    lockedAppsManager.validateApps()
+                }
+            }
+            .onChange(of: showingAddApps) { newValue in
+                if newValue {
+                    loadApps()
+                } else {
+                    lockedAppsManager.validateApps()
+                }
             }
             .navigationDestination(for: LockedApp.self) { app in
                 LockedAppDetailView(app: app, path: $path)
@@ -1558,6 +1576,15 @@ struct LockedAppsSettingsView: View {
             .background(Color(nsColor: .controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .frame(width: 180)
+            
+            Button(action: {
+                browseForApp()
+            }) {
+                Text("Browse More Apps…")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -1613,14 +1640,36 @@ struct LockedAppsSettingsView: View {
     }
 
     // MARK: - Private Helpers
-    private func loadAppsIfNeeded() {
-        guard installedApps.isEmpty else { return }
+    private func loadApps() {
+        lockedAppsManager.validateApps()
         isLoading = true
         DispatchQueue.global(qos: .userInitiated).async {
             let apps = InstalledAppsScanner.shared.scanInstalledApps()
             DispatchQueue.main.async {
                 installedApps = apps
                 isLoading = false
+            }
+        }
+    }
+    
+    private func browseForApp() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.prompt = "Add App"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            InstalledAppsScanner.shared.addCustomAppURL(url)
+            
+            isLoading = true
+            DispatchQueue.global(qos: .userInitiated).async {
+                let apps = InstalledAppsScanner.shared.scanInstalledApps()
+                DispatchQueue.main.async {
+                    self.installedApps = apps
+                    self.isLoading = false
+                }
             }
         }
     }

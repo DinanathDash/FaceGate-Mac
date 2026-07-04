@@ -136,6 +136,7 @@ struct MenuBarView: View {
         }
         .frame(width: 280, height: 350)
         .onAppear {
+            lockedAppsManager.validateApps()
             checkTemporaryDisable()
             // If setup was never finished, open the Setup Wizard immediately.
             if !UserDefaults.standard.bool(forKey: FGConstants.setupCompletedKey) {

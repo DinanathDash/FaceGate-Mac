@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// View for selecting which installed apps to lock.
 /// Shows a searchable grid of installed apps with toggle switches.
@@ -25,8 +26,9 @@ struct AppPickerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Search bar.
-            HStack(spacing: 8) {
+            // Search bar and Add button.
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                 TextField("Search apps…", text: $searchText)
@@ -41,10 +43,20 @@ struct AppPickerView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                }
+                .padding(10)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                
+                Button(action: {
+                    browseForApp()
+                }) {
+                    Text("Browse More Apps…")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.plain)
             }
-            .padding(10)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 16)
             .padding(.top, 12)
             .padding(.bottom, 8)
@@ -89,11 +101,15 @@ struct AppPickerView: View {
         .onDisappear {
             installedApps = []
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            loadApps()
+        }
     }
 
     // MARK: - Private
 
     private func loadApps() {
+        lockedAppsManager.validateApps()
         isLoading = true
         DispatchQueue.global(qos: .userInitiated).async {
             let apps = InstalledAppsScanner.shared.scanInstalledApps()
@@ -119,6 +135,20 @@ struct AppPickerView: View {
                     }
                 }
             }
+        }
+    }
+    
+    private func browseForApp() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.prompt = "Add App"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            InstalledAppsScanner.shared.addCustomAppURL(url)
+            loadApps()
         }
     }
 }
