@@ -339,7 +339,7 @@ private final class SettingsSidebarToggleTarget: NSObject {
 
 // MARK: - NSWindowDelegate
 
-extension AppDelegate: NSWindowDelegate {
+extension AppDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         if window == settingsWindow {

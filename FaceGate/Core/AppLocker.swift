@@ -235,6 +235,8 @@ final class AppLocker: ObservableObject {
             blockedRunningApp?.hide()
         }
         dismissOverlays()
+        AuthenticationManager.shared.stopFaceAuth()
+        onUnlockAction = nil
         currentlyBlockedApp = nil
         blockedRunningApp = nil
         appMonitor.didUnblockApp()

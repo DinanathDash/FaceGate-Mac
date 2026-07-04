@@ -230,21 +230,19 @@ final class CameraManager: NSObject, ObservableObject {
     func stopCapture() {
         shouldBeRunning = false
 
-        // Capture brightness value before the async block so it survives even if
-        // `self` is deallocated before the block executes (the previous [weak self]
-        // pattern silently dropped the restore when the object was released).
-        let brightnessToRestore = savedBrightness
-        savedBrightness = nil
-
         processingQueue.async { [weak self] in
             guard let self = self else { return }
             if self.captureSession.isRunning {
                 self.captureSession.stopRunning()
-                DispatchQueue.main.async { [weak self] in
-                    self?.isRunning = false
-                    if let brightness = brightnessToRestore {
-                        CameraManager.setBrightness(brightness)
-                    }
+            }
+            // Always restore brightness, even if the session was already stopped,
+            // so we don't leave the display at maximum brightness.
+            let brightness = self.savedBrightness
+            self.savedBrightness = nil
+            DispatchQueue.main.async {
+                self.isRunning = false
+                if let brightness = brightness {
+                    CameraManager.setBrightness(brightness)
                 }
             }
         }
