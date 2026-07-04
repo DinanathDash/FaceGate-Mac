@@ -259,7 +259,7 @@ final class AppLocker: ObservableObject {
 
     /// Retrieve all onscreen window frames and IDs for a given process PID.
     private func getAppWindowFrames(for pid: pid_t) -> [(CGWindowID, CGRect)] {
-        let options = CGWindowListOption.optionAll
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             return []
         }
@@ -288,10 +288,16 @@ final class AppLocker: ObservableObject {
 
     /// Convert Quartz (top-left origin) coordinates to AppKit (bottom-left origin) coordinates.
     private func convertQuartzToAppKit(rect: CGRect) -> CGRect {
-        guard let mainScreen = NSScreen.screens.first else { return rect }
-        let mainScreenHeight = mainScreen.frame.height
-        let appKitY = mainScreenHeight - rect.origin.y - rect.height
-        return CGRect(x: rect.origin.x, y: appKitY, width: rect.width, height: rect.height)
+        let screens = NSScreen.screens
+        guard let primaryScreen = screens.first else { return rect }
+        let globalFrame = screens.reduce(CGRect.null) { $0.union($1.frame) }
+        guard !globalFrame.isNull else { return rect }
+        
+        let primaryScreenHeight = primaryScreen.frame.height
+        let quartzYTop = primaryScreenHeight - globalFrame.maxY
+        let appKitYTop = globalFrame.maxY - (rect.origin.y - quartzYTop)
+        let appKitY = appKitYTop - rect.size.height
+        return CGRect(x: rect.origin.x, y: appKitY, width: rect.size.width, height: rect.size.height)
     }
 
     /// Enforce a minimum size of 400x500 for the overlay to avoid clipping UI components.
@@ -373,11 +379,13 @@ final class AppLocker: ObservableObject {
     /// Show a temporary full screen shield on the active screen and wait for the blocked
     /// app's windows to become available, then transition to window-specific overlays.
     private func showTemporaryFullScreenOverlay(appName: String, bundleIdentifier: String) {
-        guard let activeScreen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let screens = NSScreen.screens
+        let mouseLocation = NSEvent.mouseLocation
+        guard let activeScreen = screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) ?? NSScreen.main ?? screens.first else { return }
         guard let pid = blockedRunningApp?.processIdentifier else { return }
 
         let panel = AuthOverlayPanel(
-            frame: activeScreen.frame,
+            screen: activeScreen,
             appName: appName,
             bundleIdentifier: bundleIdentifier,
             onAuthenticated: { [weak self] in
