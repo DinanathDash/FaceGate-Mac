@@ -216,12 +216,9 @@ final class CameraManager: NSObject, ObservableObject {
                 }
                 guard !self.captureSession.inputs.isEmpty else { return }
 
-                // Synchronously capture and maximize brightness on the main thread
-                // before startRunning() to avoid race conditions.
                 DispatchQueue.main.sync { [weak self] in
                     self?.saveBrightnessAndMaximize()
                 }
-
                 self.captureSession.startRunning()
                 DispatchQueue.main.async { [weak self] in
                     self?.isRunning = true
@@ -238,11 +235,15 @@ final class CameraManager: NSObject, ObservableObject {
             if self.captureSession.isRunning {
                 self.captureSession.stopRunning()
             }
-            // Restore brightness and update status on the main thread.
-            // If the manager gets deallocated before this executes, deinit handles the restore safely.
-            DispatchQueue.main.async { [weak self] in
-                self?.isRunning = false
-                self?.restoreBrightness()
+            // Always restore brightness, even if the session was already stopped,
+            // so we don't leave the display at maximum brightness.
+            let brightness = self.savedBrightness
+            self.savedBrightness = nil
+            DispatchQueue.main.async {
+                self.isRunning = false
+                if let brightness = brightness {
+                    CameraManager.setBrightness(brightness)
+                }
             }
         }
     }
@@ -284,13 +285,6 @@ final class CameraManager: NSObject, ObservableObject {
 
         savedBrightness = current
         _ = setBrightness(displayID, 1.0)
-    }
-
-    /// Restores the brightness that was saved in `saveBrightnessAndMaximize()`.
-    private func restoreBrightness() {
-        guard let saved = savedBrightness else { return }
-        savedBrightness = nil
-        CameraManager.setBrightness(saved)
     }
 
     /// Sets display brightness to the given value. Static so it can be called from

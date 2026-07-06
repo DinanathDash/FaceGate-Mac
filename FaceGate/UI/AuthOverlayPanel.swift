@@ -26,7 +26,7 @@ final class AuthOverlayPanel: NSPanel {
             defer: false
         )
 
-        // Panel configuration for maximum blocking.
+        // Panel configuration for maximum blocking — use screenSaver level to stay above all app windows.
         self.level = .screenSaver
         self.isOpaque = false
         self.backgroundColor = .clear
@@ -55,7 +55,54 @@ final class AuthOverlayPanel: NSPanel {
         )
 
         let hostingView = NSHostingView(rootView: overlayView)
-        hostingView.frame = screen.frame
+        hostingView.frame = NSRect(origin: .zero, size: screen.frame.size)
+        hostingView.autoresizingMask = [.width, .height]
+        self.contentView = hostingView
+    }
+
+    /// Create an overlay panel at a specific frame (used for App Window mode overlays).
+    init(
+        frame: NSRect,
+        appName: String,
+        bundleIdentifier: String,
+        onAuthenticated: @escaping () -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        super.init(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        // Use floating level so the overlay stays above the locked app's windows
+        // without going above the system menu bar (screenSaver level).
+        self.level = .floating
+        self.isOpaque = false
+        self.backgroundColor = .clear
+        self.hasShadow = false
+        self.isReleasedWhenClosed = false
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        self.isMovable = false
+        self.isMovableByWindowBackground = false
+        self.hidesOnDeactivate = false
+        self.canHide = false
+        self.becomesKeyOnlyIfNeeded = false
+        self.acceptsMouseMovedEvents = false
+        self.ignoresMouseEvents = false
+
+        let appIcon = loadAppIcon(bundleIdentifier: bundleIdentifier)
+
+        let overlayView = AuthOverlayView(
+            appName: appName,
+            appIcon: appIcon,
+            onAuthenticated: onAuthenticated,
+            onCancel: onCancel
+        )
+
+        let hostingView = NSHostingView(rootView: overlayView)
+        hostingView.frame = NSRect(origin: .zero, size: frame.size)
+        hostingView.autoresizingMask = [.width, .height]
         self.contentView = hostingView
     }
 

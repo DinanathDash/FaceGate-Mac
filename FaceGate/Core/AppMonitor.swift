@@ -24,7 +24,20 @@ final class AppMonitor: ObservableObject {
     /// Cooldown to prevent re-lock loop right after unlock (used for "lock immediately" mode).
     private var recentlyUnlocked: [String: Date] = [:]
 
+    /// Tracks the currently blocked app to avoid re-entrant access to AppLocker.currentlyBlockedApp.
+    private var blockedApp: String?
+
     private init() {}
+
+    /// Called by AppLocker when an app is blocked.
+    func didBlockApp(_ bundleId: String) {
+        blockedApp = bundleId
+    }
+
+    /// Called by AppLocker when an app is unblocked or switched away.
+    func didUnblockApp() {
+        blockedApp = nil
+    }
 
     /// Record that an app was just unlocked (starts a 1-second cooldown against re-lock).
     func recordUnlock(for bundleIdentifier: String) {
@@ -115,6 +128,46 @@ final class AppMonitor: ObservableObject {
         if isProtectionDisabled() { return }
 
         guard let bundleId = app.bundleIdentifier else { return }
+
+        // If we are currently blocking an app...
+        if let blockedApp = blockedApp {
+            if bundleId == blockedApp {
+                // If the user activated the blocked app, bring overlays back to front.
+                AppLocker.shared.bringOverlaysToFront()
+                return
+            } else if bundleId != Bundle.main.bundleIdentifier {
+                // The user activated a different app.
+                // Let's check if the new app needs to be blocked.
+                let isNewAppLocked = lockedAppsManager.isLocked(bundleId)
+                let hasSession = sessionManager.hasActiveSession(for: bundleId)
+                
+                // Cooldown check for the new app.
+                var inCooldown = false
+                if let lastUnlock = recentlyUnlocked[bundleId],
+                   Date().timeIntervalSince(lastUnlock) < 1 {
+                    inCooldown = true
+                }
+
+                if isNewAppLocked && !hasSession && !inCooldown {
+                    // The new app needs to be blocked!
+                    // In App Window mode, we must first clear/dismiss the old app's overlays
+                    // before blocking the new one, since AppLocker only manages one block at a time.
+                    let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
+                    if overlayMode == 1 {
+                        AppLocker.shared.dismissOverlays()
+                    }
+                    // Do NOT return here. Let the code flow down to block the new app.
+                } else {
+                    // The new app is either not locked or has an active session.
+                    let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
+                    if overlayMode == 0 {
+                        // Only hide and dismiss on switch-away in Full Screen mode
+                        AppLocker.shared.handleSwitchAway()
+                    }
+                    return
+                }
+            }
+        }
 
         // Check if this app is in the locked list.
         guard lockedAppsManager.isLocked(bundleId) else { return }
