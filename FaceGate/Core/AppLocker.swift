@@ -46,13 +46,10 @@ final class AppLocker: ObservableObject {
         blockedRunningApp = runningApp
         appMonitor.didBlockApp(bundleIdentifier)
 
-        // Step 1: Immediately hide the locked app if in Full Screen mode.
-        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
-        if overlayMode == 0 {
-            runningApp.hide()
-        } else {
-            runningApp.activate(options: [.activateIgnoringOtherApps])
-        }
+        // Step 1: Activate the locked app so macOS stays on its space.
+        // The overlay panel at .screenSaver level with .fullScreenAuxiliary
+        // covers the app regardless of whether it's full-screen or windowed.
+        runningApp.activate(options: [.activateIgnoringOtherApps])
 
         // Start Face ID authentication if available.
         if AuthenticationManager.shared.isFaceUnlockAvailable {
@@ -147,6 +144,13 @@ final class AppLocker: ObservableObject {
         }
     }
 
+    /// Restore the overlay panels to their default window level based on the active shield mode.
+    func restoreOverlayWindowLevel() {
+        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
+        let defaultLevel: NSWindow.Level = (overlayMode == 1) ? .floating : .screenSaver
+        setOverlayWindowLevel(defaultLevel)
+    }
+
     // MARK: - Private
 
     /// Create and show auth overlay panels.
@@ -230,9 +234,9 @@ final class AppLocker: ObservableObject {
     /// Called when the user switches focus to another app.
     /// Gracefully hides the blocked application and dismisses overlays.
     func handleSwitchAway() {
-        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
-        if overlayMode == 0 {
-            blockedRunningApp?.hide()
+        // Hide the blocked app first to protect user privacy before removing the overlay.
+        if let app = blockedRunningApp {
+            app.hide()
         }
         dismissOverlays()
         AuthenticationManager.shared.stopFaceAuth()
