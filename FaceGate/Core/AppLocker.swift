@@ -270,6 +270,16 @@ final class AppLocker: ObservableObject {
         }
 
         NSApp.activate(ignoringOtherApps: true)
+
+        // runningApp.activate(options: []) later in blockApp can steal key status
+        // from the overlay. We re-assert on the next runloop tick to guarantee
+        // the overlay remains key for Touch ID.
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            if let activeScreen = activeScreen {
+                self.overlayPanels.first(where: { $0.value.screen == activeScreen })?.value.makeKeyAndOrderFront(nil)
+            }
+        }
     }
 
     /// Called when the user switches focus to another app.
