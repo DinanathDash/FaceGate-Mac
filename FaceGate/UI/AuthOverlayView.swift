@@ -8,6 +8,7 @@ struct AuthOverlayView: View {
     let appName: String
     let appIcon: NSImage
     var isAppLocking: Bool = true
+    var isPrimary: Bool = true
     var cancelButtonTitle: String = "Cancel & Close App"
     var subtitleMessage: String? = nil
     let onAuthenticated: () -> Void
@@ -20,7 +21,6 @@ struct AuthOverlayView: View {
     @State private var showPasswordField: Bool = false
     @State private var showFallbacks: Bool = false
     @State private var shakePassword: Bool = false
-    @State private var faceAuthStarted: Bool = false
     @State private var isTimedOut: Bool = false
     @State private var didAuthenticate: Bool = false
 
@@ -176,7 +176,9 @@ struct AuthOverlayView: View {
             .animation(.easeInOut(duration: 0.2), value: authManager.authState)
         }
         .onAppear {
-            if !authManager.isFaceUnlockAvailable {
+            // Only the primary screen triggers Touch ID — secondary screens show the
+            // blur/overlay without firing a duplicate LAContext evaluation (Bug 1).
+            if isPrimary && !authManager.isFaceUnlockAvailable {
                 if TouchIDAuth.shared.canUse {
                     authenticateWithTouchID()
                 } else {
@@ -344,7 +346,6 @@ struct AuthOverlayView: View {
                         panel.makeKeyAndOrderFront(nil)
                     }
                     DispatchQueue.main.async {
-                        faceAuthStarted = true
                         authManager.authenticateWithFace { success in
                             if success {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -515,23 +516,30 @@ struct AuthOverlayView: View {
     private func authenticateWithTouchID() {
         authManager.stopFaceAuth()
 
-        // Ensure our window is key and active before triggering Touch ID so the system prompt gets focus.
-        NSApp.activate(ignoringOtherApps: true)
-        if let panel = NSApp.windows.first(where: { $0 is AuthOverlayPanel && $0.isVisible }) {
-            panel.makeKeyAndOrderFront(nil)
-        }
+        // NOTE: Intentionally NOT calling NSApp.activate or makeKeyAndOrderFront
+        // here — Touch ID dialog needs uncontested focus.
+        AppLocker.shared.setTouchIDMode()
 
-        // Delay slightly to let window focus transitions settle before requesting biometric verification.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             authManager.authenticateWithTouchID(appName: appName) { success in
-                // Reclaim focus after the system Touch ID sheet dismisses (Issue #96).
-                // The LAContext sheet steals key status; we restore it so Touch ID
-                // result buttons and the password field are immediately interactive.
-                NSApp.activate(ignoringOtherApps: true)
-                if let panel = NSApp.windows.first(where: { $0 is AuthOverlayPanel && $0.isVisible }) {
-                    panel.makeKeyAndOrderFront(nil)
-                }
-                if !success {
+                AppLocker.shared.restoreTouchIDMode()
+
+                if success {
+                } else {
+                    // Reclaim focus after Touch ID dismisses (3 retries).
+                    func reclaimFocus(attemptsLeft: Int) {
+                        guard attemptsLeft > 0 else { return }
+                        if let panel = NSApp.windows.first(where: { $0 is AuthOverlayPanel && $0.isVisible }) {
+                            NSApp.activate(ignoringOtherApps: true)
+                            panel.makeKeyAndOrderFront(nil)
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            reclaimFocus(attemptsLeft: attemptsLeft - 1)
+                        }
+                    }
+
+                    reclaimFocus(attemptsLeft: 3)
+
                     withAnimation {
                         showFallbacks = true
                     }

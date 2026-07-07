@@ -1251,6 +1251,9 @@ private struct AboutView: View {
                 Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0")")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
+                Text("Build: \(BuildInfo.identifier)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary.opacity(0.6))
             }
 
             Text("A privacy-focused app locker for macOS with face authentication.")

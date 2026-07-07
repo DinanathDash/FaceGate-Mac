@@ -46,10 +46,14 @@ final class AppLocker: ObservableObject {
         blockedRunningApp = runningApp
         appMonitor.didBlockApp(bundleIdentifier)
 
-        // Step 1: Activate the locked app so macOS stays on its space.
-        // The overlay panel at .screenSaver level with .fullScreenAuxiliary
-        // covers the app regardless of whether it's full-screen or windowed.
-        runningApp.activate(options: [.activateIgnoringOtherApps])
+        // Step 1: Present auth overlays FIRST so the locked app's content is never
+        // visible to the user. This prevents the privacy flash described in Bug 4.
+        showOverlays(for: bundleIdentifier)
+
+        // Step 2: Bring the locked app forward so macOS stays on its space.
+        // Use orderFront-style activation — don't make it key or steal focus,
+        // as the system Touch ID dialog needs uncontested focus (MakLock pattern).
+        runningApp.activate(options: [])
 
         // Start Face ID authentication if available.
         if AuthenticationManager.shared.isFaceUnlockAvailable {
@@ -59,9 +63,6 @@ final class AppLocker: ObservableObject {
                 }
             }
         }
-
-        // Step 2: Present auth overlays.
-        showOverlays(for: bundleIdentifier)
     }
 
     /// Called when authentication succeeds — reveal the app and dismiss overlays.
@@ -151,6 +152,26 @@ final class AppLocker: ObservableObject {
         setOverlayWindowLevel(defaultLevel)
     }
 
+    /// Configure overlays for Touch ID: lower window level and enable mouse event
+    /// passthrough so the system Touch ID dialog can receive focus and events.
+    /// Mirrors the pattern used by MakLock's OverlayWindowService.setTouchIDMode(_:).
+    func setTouchIDMode() {
+        for panel in overlayPanels.values {
+            panel.level = .statusBar
+            panel.ignoresMouseEvents = true
+        }
+    }
+
+    /// Restore overlays after Touch ID completes (reverses setTouchIDMode).
+    func restoreTouchIDMode() {
+        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
+        let defaultLevel: NSWindow.Level = (overlayMode == 1) ? .floating : .screenSaver
+        for panel in overlayPanels.values {
+            panel.level = defaultLevel
+            panel.ignoresMouseEvents = false
+        }
+    }
+
     // MARK: - Private
 
     /// Create and show auth overlay panels.
@@ -195,12 +216,42 @@ final class AppLocker: ObservableObject {
                 showTemporaryFullScreenOverlay(appName: appName, bundleIdentifier: bundleIdentifier)
             }
         } else {
-            // Present auth overlays on all screens.
-            for (index, screen) in screens.enumerated() {
+            var targetScreens: [(index: Int, screen: NSScreen)] = []
+
+            if let app = blockedRunningApp {
+                let appWindows = getAppWindowFrames(for: app.processIdentifier)
+                if !appWindows.isEmpty {
+                    var seenIndices = Set<Int>()
+                    for (index, screen) in screens.enumerated() {
+                        for (_, windowFrame) in appWindows {
+                            let appKitFrame = convertQuartzToAppKit(rect: windowFrame)
+                            if screen.frame.intersects(appKitFrame) {
+                                if seenIndices.insert(index).inserted {
+                                    targetScreens.append((index: index, screen: screen))
+                                }
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+
+            if targetScreens.isEmpty {
+                if let screen = activeScreen {
+                    let index = screens.firstIndex(of: screen) ?? 0
+                    targetScreens.append((index: index, screen: screen))
+                } else if let screen = screens.first {
+                    targetScreens.append((index: 0, screen: screen))
+                }
+            }
+
+            for (index, screen) in targetScreens {
+                let isScreenPrimary = (targetScreens.count == 1) || (screen == activeScreen)
                 let panel = AuthOverlayPanel(
                     screen: screen,
                     appName: appName,
                     bundleIdentifier: bundleIdentifier,
+                    isPrimary: isScreenPrimary,
                     onAuthenticated: { [weak self] in
                         self?.unlockCurrentApp()
                     },
@@ -208,7 +259,7 @@ final class AppLocker: ObservableObject {
                         self?.terminateBlockedApp()
                     }
                 )
-                if screen == activeScreen {
+                if isScreenPrimary {
                     panel.makeKeyAndOrderFront(nil)
                     panel.makeMain()
                 } else {
@@ -218,28 +269,16 @@ final class AppLocker: ObservableObject {
             }
         }
 
-        // Activate FaceGate so it becomes the active app and can receive keyboard input.
         NSApp.activate(ignoringOtherApps: true)
-
-        // Hiding a running app causes macOS to asynchronously focus the next app.
-        // We activate again on the next runloop tick to override this focus shift.
-        DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-            if let activeScreen = activeScreen {
-                self.overlayPanels.first(where: { $0.value.screen == activeScreen })?.value.makeKeyAndOrderFront(nil)
-            }
-        }
     }
 
     /// Called when the user switches focus to another app.
     /// Gracefully hides the blocked application and dismisses overlays.
     func handleSwitchAway() {
-        // Hide the blocked app first to protect user privacy before removing the overlay.
-        if let app = blockedRunningApp {
-            app.hide()
-        }
+        // Don't hide the app — interferes with Touch ID focus.
         dismissOverlays()
         AuthenticationManager.shared.stopFaceAuth()
+        AuthenticationManager.shared.stopTouchIDAuth()
         onUnlockAction = nil
         currentlyBlockedApp = nil
         blockedRunningApp = nil

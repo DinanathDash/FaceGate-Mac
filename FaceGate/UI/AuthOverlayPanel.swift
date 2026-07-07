@@ -10,12 +10,14 @@ final class AuthOverlayPanel: NSPanel {
     ///   - screen: The screen to cover.
     ///   - appName: Display name of the locked app.
     ///   - bundleIdentifier: Bundle ID of the locked app.
+    ///   - isPrimary: Whether this is the primary screen's overlay (only primary triggers Touch ID).
     ///   - onAuthenticated: Called when authentication succeeds.
     ///   - onCancel: Called when the user cancels / wants to quit the locked app.
     init(
         screen: NSScreen,
         appName: String,
         bundleIdentifier: String,
+        isPrimary: Bool = true,
         onAuthenticated: @escaping () -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -50,6 +52,7 @@ final class AuthOverlayPanel: NSPanel {
         let overlayView = AuthOverlayView(
             appName: appName,
             appIcon: appIcon,
+            isPrimary: isPrimary,
             onAuthenticated: onAuthenticated,
             onCancel: onCancel
         )

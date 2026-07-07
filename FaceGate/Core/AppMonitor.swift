@@ -154,6 +154,7 @@ final class AppMonitor: ObservableObject {
                     // before blocking the new one, since AppLocker only manages one block at a time.
                     let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
                     if overlayMode == 1 {
+                        AuthenticationManager.shared.stopFaceAuth()
                         AppLocker.shared.dismissOverlays()
                     }
                     // Do NOT return here. Let the code flow down to block the new app.
@@ -161,6 +162,7 @@ final class AppMonitor: ObservableObject {
                     // The new app is either not locked or has an active session.
                     let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
                     if overlayMode == 0 {
+                        guard !AuthenticationManager.shared.isTouchIDInProgress else { return }
                         // Only hide and dismiss on switch-away in Full Screen mode
                         AppLocker.shared.handleSwitchAway()
                     }

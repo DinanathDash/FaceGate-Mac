@@ -67,6 +67,8 @@ final class AuthenticationManager: ObservableObject {
             return
         }
 
+        stopTouchIDAuth() // Ensure pending Touch ID is cancelled before starting face auth
+
         authState = .authenticating(.faceUnlock)
 
         faceAuthManager.startAuthentication { [weak self] success in
@@ -89,6 +91,15 @@ final class AuthenticationManager: ObservableObject {
         faceAuthManager.stopAuthentication()
     }
 
+    /// Prevents duplicate Touch ID prompts when multiple overlay panels fire
+    /// onAppear simultaneously (e.g. multi-monitor setups).
+    private var touchIDInProgress = false
+
+    /// Whether a Touch ID evaluation is currently in progress.
+    /// Used by AppMonitor to suppress switch-away handling during the system
+    /// Touch ID dialog (which causes a transient app-activation for SecurityAgent).
+    var isTouchIDInProgress: Bool { touchIDInProgress }
+
     /// Authenticate using Touch ID.
     /// - Parameter appName: Name of the app being unlocked (shown in Touch ID dialog).
     /// - Parameter completion: Called with the result.
@@ -98,10 +109,17 @@ final class AuthenticationManager: ObservableObject {
             return
         }
 
+        guard !touchIDInProgress else {
+            completion(false)
+            return
+        }
+
+        touchIDInProgress = true
         authState = .authenticating(.touchID)
 
         touchIDAuth.authenticate(reason: "Unlock \(appName)") { [weak self] result in
             guard let self = self else { return }
+            self.touchIDInProgress = false
             // Ignore stale callbacks from cancelled/invalidated LAContext that arrive
             // after another auth method (e.g. password) already changed the state.
             guard case .authenticating(.touchID) = self.authState else { return }
@@ -124,6 +142,7 @@ final class AuthenticationManager: ObservableObject {
     /// Stop any in-progress Touch ID authentication.
     func stopTouchIDAuth() {
         touchIDAuth.cancelAuthentication()
+        touchIDInProgress = false
         if case .authenticating(let method) = authState, method == .touchID {
             authState = .idle
         }
