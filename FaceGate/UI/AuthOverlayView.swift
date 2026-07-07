@@ -525,6 +525,12 @@ struct AuthOverlayView: View {
                 AppLocker.shared.restoreTouchIDMode()
 
                 if success {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        guard !didAuthenticate else { return }
+                        didAuthenticate = true
+                        onAuthenticated()
+                        authManager.resetAttempts()
+                    }
                 } else {
                     // Reclaim focus after Touch ID dismisses (3 retries).
                     func reclaimFocus(attemptsLeft: Int) {
