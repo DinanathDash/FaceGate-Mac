@@ -1363,21 +1363,25 @@ struct LockedAppsSettingsView: View {
                 }
             }
             .onAppear {
-                loadApps()
+                loadAppsIfNeeded()
             }
             .onDisappear {
                 installedApps = []
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 if showingAddApps {
-                    loadApps()
+                    backgroundRefreshApps()
                 } else {
                     lockedAppsManager.validateApps()
                 }
             }
             .onChange(of: showingAddApps) { newValue in
                 if newValue {
-                    loadApps()
+                    if installedApps.isEmpty {
+                        loadAppsIfNeeded()
+                    } else {
+                        backgroundRefreshApps()
+                    }
                 } else {
                     lockedAppsManager.validateApps()
                 }
@@ -1640,14 +1644,25 @@ struct LockedAppsSettingsView: View {
     }
 
     // MARK: - Private Helpers
-    private func loadApps() {
+    private func loadAppsIfNeeded() {
+        guard installedApps.isEmpty else { return }
         lockedAppsManager.validateApps()
         isLoading = true
         DispatchQueue.global(qos: .userInitiated).async {
             let apps = InstalledAppsScanner.shared.scanInstalledApps()
             DispatchQueue.main.async {
-                installedApps = apps
-                isLoading = false
+                self.installedApps = apps
+                self.isLoading = false
+            }
+        }
+    }
+    
+    private func backgroundRefreshApps() {
+        lockedAppsManager.validateApps()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let apps = InstalledAppsScanner.shared.scanInstalledApps()
+            DispatchQueue.main.async {
+                self.installedApps = apps
             }
         }
     }
@@ -1662,15 +1677,8 @@ struct LockedAppsSettingsView: View {
         
         if panel.runModal() == .OK, let url = panel.url {
             InstalledAppsScanner.shared.addCustomAppURL(url)
-            
-            isLoading = true
-            DispatchQueue.global(qos: .userInitiated).async {
-                let apps = InstalledAppsScanner.shared.scanInstalledApps()
-                DispatchQueue.main.async {
-                    self.installedApps = apps
-                    self.isLoading = false
-                }
-            }
+            self.installedApps = []
+            loadAppsIfNeeded()
         }
     }
 }

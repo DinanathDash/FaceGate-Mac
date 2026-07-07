@@ -96,26 +96,37 @@ struct AppPickerView: View {
             }
         }
         .onAppear {
-            loadApps()
+            loadAppsIfNeeded()
         }
         .onDisappear {
             installedApps = []
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            loadApps()
+            backgroundRefreshApps()
         }
     }
 
     // MARK: - Private
 
-    private func loadApps() {
+    private func loadAppsIfNeeded() {
+        guard installedApps.isEmpty else { return }
         lockedAppsManager.validateApps()
         isLoading = true
         DispatchQueue.global(qos: .userInitiated).async {
             let apps = InstalledAppsScanner.shared.scanInstalledApps()
             DispatchQueue.main.async {
-                installedApps = apps
-                isLoading = false
+                self.installedApps = apps
+                self.isLoading = false
+            }
+        }
+    }
+
+    private func backgroundRefreshApps() {
+        lockedAppsManager.validateApps()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let apps = InstalledAppsScanner.shared.scanInstalledApps()
+            DispatchQueue.main.async {
+                self.installedApps = apps
             }
         }
     }
@@ -148,7 +159,8 @@ struct AppPickerView: View {
         
         if panel.runModal() == .OK, let url = panel.url {
             InstalledAppsScanner.shared.addCustomAppURL(url)
-            loadApps()
+            self.installedApps = []
+            loadAppsIfNeeded()
         }
     }
 }
