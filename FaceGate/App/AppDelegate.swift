@@ -25,14 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             userDriverDelegate: nil
         )
 
-        // Pre-load the Core ML face embedding model to avoid cold-start delay.
-        // The ANE compilation happens at load time (~200-500ms) — pay this cost now.
-        FaceEmbedder.shared.loadModel()
-
-        // Start the schedule manager so it begins evaluating lock/unlock time windows.
-        _ = AppScheduleManager.shared
-
-        // Wire up AppMonitor ↔ AppLocker.
+        // Wire up AppMonitor ↔ AppLocker BEFORE starting monitoring or loading the model.
+        // startMonitoring() immediately checks the frontmost app and may fire onLockedAppDetected.
         AppMonitor.shared.onLockedAppDetected = { [weak self] bundleId, runningApp in
             _ = self  // silence warning
             AppLocker.shared.blockApp(bundleIdentifier: bundleId, runningApp: runningApp)
@@ -41,7 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Initialize as accessory to let SwiftUI's MenuBarExtra initialize first.
         NSApp.setActivationPolicy(.accessory)
 
-        // Start monitoring if setup is complete, otherwise open setup after a delay.
+        // Start monitoring BEFORE the blocking loadModel() call. Observers registered with
+        // queue: .main will enqueue notifications during the block and deliver them once the
+        // runloop resumes — no notifications are lost.
         if UserDefaults.standard.bool(forKey: FGConstants.setupCompletedKey) {
             AppMonitor.shared.startMonitoring()
         } else {
@@ -49,6 +45,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.openSetupWindow()
             }
         }
+
+        // Pre-load the Core ML face embedding model to avoid cold-start delay.
+        // The ANE compilation happens at load time (~200-500ms) — pay this cost now.
+        // Safe to block here: workspace observers are already registered above.
+        FaceEmbedder.shared.loadModel()
+
+        // Start the schedule manager so it begins evaluating lock/unlock time windows.
+        _ = AppScheduleManager.shared
+
 
         // Sync uninstall protection state on startup.
         syncUninstallProtection()

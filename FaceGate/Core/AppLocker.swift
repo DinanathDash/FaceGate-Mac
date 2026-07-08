@@ -18,8 +18,6 @@ final class AppLocker: ObservableObject {
     /// Active overlay panels mapped by window IDs (or dummy IDs for fullscreen).
     private var overlayPanels: [CGWindowID: AuthOverlayPanel] = [:]
 
-    /// One-shot work item to check for windows after a delay when an app is launching.
-    private var windowDetectionWorkItem: DispatchWorkItem?
 
     /// Timer used to periodically realign overlays if the locked app's windows move/resize.
     private var windowAlignmentTimer: Timer?
@@ -115,8 +113,6 @@ final class AppLocker: ObservableObject {
 
     /// Dismiss all overlays without unlocking (e.g., if FaceGate is quitting).
     func dismissOverlays() {
-        windowDetectionWorkItem?.cancel()
-        windowDetectionWorkItem = nil
         windowAlignmentTimer?.invalidate()
         windowAlignmentTimer = nil
         if let observer = windowActivationObserver {
@@ -211,8 +207,28 @@ final class AppLocker: ObservableObject {
                 // Track window updates periodically
                 startWindowAlignmentTimer(for: app.processIdentifier, appName: appName, bundleIdentifier: bundleIdentifier)
             } else {
-                // If no window found (e.g. launching), show a temporary full screen shield on main screen and poll.
-                showTemporaryFullScreenOverlay(appName: appName, bundleIdentifier: bundleIdentifier)
+                // No windows yet (app is cold-launching). Show a full-screen overlay as the
+                // secure initial state, and let the windowAlignmentTimer handle the transition
+                // to window-specific overlays once the app's windows materialize.
+                if let screen = activeScreen {
+                    let panel = AuthOverlayPanel(
+                        screen: screen,
+                        appName: appName,
+                        bundleIdentifier: bundleIdentifier,
+                        onAuthenticated: { [weak self] in
+                            self?.unlockCurrentApp()
+                        },
+                        onCancel: { [weak self] in
+                            self?.terminateBlockedApp()
+                        }
+                    )
+                    panel.makeKeyAndOrderFront(nil)
+                    overlayPanels[0] = panel
+                }
+
+                // Start the alignment timer — when windows appear, alignOverlayWindows will
+                // detect the ID mismatch ({0} vs real IDs) and call showOverlays to transition.
+                startWindowAlignmentTimer(for: app.processIdentifier, appName: appName, bundleIdentifier: bundleIdentifier)
             }
         } else {
             var targetScreens: [(index: Int, screen: NSScreen)] = []
@@ -448,64 +464,4 @@ final class AppLocker: ObservableObject {
         }
     }
 
-    /// Show a temporary full screen shield on the active screen and wait for the blocked
-    /// app's windows to become available, then transition to window-specific overlays.
-    private func showTemporaryFullScreenOverlay(appName: String, bundleIdentifier: String) {
-        let screens = NSScreen.screens
-        let mouseLocation = NSEvent.mouseLocation
-        guard let activeScreen = screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) ?? NSScreen.main ?? screens.first else { return }
-        guard let pid = blockedRunningApp?.processIdentifier else { return }
-
-        let panel = AuthOverlayPanel(
-            screen: activeScreen,
-            appName: appName,
-            bundleIdentifier: bundleIdentifier,
-            onAuthenticated: { [weak self] in
-                self?.unlockCurrentApp()
-            },
-            onCancel: { [weak self] in
-                self?.terminateBlockedApp()
-            }
-        )
-        panel.makeKeyAndOrderFront(nil)
-        overlayPanels[0] = panel
-
-        // Remove any prior observer before registering a new one.
-        if let existing = windowActivationObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(existing)
-            windowActivationObserver = nil
-        }
-
-        // Register for the blocked app's activation to detect window creation.
-        let center = NSWorkspace.shared.notificationCenter
-        windowActivationObserver = center.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self = self,
-                  let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  app.processIdentifier == pid else { return }
-            self.checkAndTransitionFromTemporaryOverlay(bundleIdentifier: bundleIdentifier)
-        }
-
-        // One-shot delayed check as fallback if the activation notification was missed.
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.checkAndTransitionFromTemporaryOverlay(bundleIdentifier: bundleIdentifier)
-        }
-        windowDetectionWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
-    }
-
-    /// Check if the blocked app's windows are now available and transition from
-    /// the temporary full-screen shield to window-specific overlays.
-    private func checkAndTransitionFromTemporaryOverlay(bundleIdentifier: String) {
-        guard let app = blockedRunningApp else { return }
-        let windows = getAppWindowFrames(for: app.processIdentifier)
-        if !windows.isEmpty {
-            windowDetectionWorkItem?.cancel()
-            windowDetectionWorkItem = nil
-            showOverlays(for: bundleIdentifier)
-        }
-    }
 }
