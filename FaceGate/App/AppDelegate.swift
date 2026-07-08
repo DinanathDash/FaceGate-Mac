@@ -156,7 +156,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func openSettingsWindow() {
         closeMenuBarWindow()
 
-        if AppLocker.shared.currentlyBlockedApp != nil {
+        if let blockedApp = AppLocker.shared.currentlyBlockedApp,
+           NSWorkspace.shared.frontmostApplication?.bundleIdentifier == blockedApp {
             AppLocker.shared.onUnlockAction = { [weak self] in
                 self?.openSettingsWindowBypassingAuth()
             }
@@ -165,6 +166,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 panel.makeKeyAndOrderFront(nil)
             }
             return
+        } else if AppLocker.shared.currentlyBlockedApp != nil {
+            AppLocker.shared.suspendCurrentLockAuthentication()
         }
 
         ActionAuthWindow.show(reason: "FaceGate Settings") { [weak self] in

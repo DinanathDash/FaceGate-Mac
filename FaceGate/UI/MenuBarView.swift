@@ -364,4 +364,5 @@ private struct MenuButton: View {
 extension Notification.Name {
     static let openSettings = Notification.Name("com.dweep.FaceGate.openSettings")
     static let openSetup = Notification.Name("com.dweep.FaceGate.openSetup")
+    static let authOverlayDidBecomeActive = Notification.Name("com.dweep.FaceGate.authOverlayDidBecomeActive")
 }

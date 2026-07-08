@@ -47,10 +47,6 @@ final class ActionAuthWindow: NSPanel {
         panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-
-        if AuthenticationManager.shared.isFaceUnlockAvailable {
-            AuthenticationManager.shared.authenticateWithFace { _ in }
-        }
     }
 
     init(
@@ -79,6 +75,7 @@ final class ActionAuthWindow: NSPanel {
         let overlayView = AuthOverlayView(
             appName: reason,
             appIcon: appIcon,
+            authOwner: .action(reason),
             isAppLocking: false,
             cancelButtonTitle: "Cancel",
             onAuthenticated: onAuthenticated,

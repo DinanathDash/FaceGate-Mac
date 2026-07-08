@@ -52,6 +52,7 @@ final class AuthOverlayPanel: NSPanel {
         let overlayView = AuthOverlayView(
             appName: appName,
             appIcon: appIcon,
+            authOwner: .appLock(bundleIdentifier),
             isPrimary: isPrimary,
             onAuthenticated: onAuthenticated,
             onCancel: onCancel
@@ -99,6 +100,7 @@ final class AuthOverlayPanel: NSPanel {
         let overlayView = AuthOverlayView(
             appName: appName,
             appIcon: appIcon,
+            authOwner: .appLock(bundleIdentifier),
             onAuthenticated: onAuthenticated,
             onCancel: onCancel
         )

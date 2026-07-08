@@ -54,15 +54,6 @@ final class AppLocker: ObservableObject {
         // Use orderFront-style activation — don't make it key or steal focus,
         // as the system Touch ID dialog needs uncontested focus (MakLock pattern).
         runningApp.activate(options: [])
-
-        // Start Face ID authentication if available.
-        if AuthenticationManager.shared.isFaceUnlockAvailable {
-            AuthenticationManager.shared.authenticateWithFace { [weak self] success in
-                if success {
-                    self?.unlockCurrentApp()
-                }
-            }
-        }
     }
 
     /// Called when authentication succeeds — reveal the app and dismiss overlays.
@@ -303,6 +294,16 @@ final class AppLocker: ObservableObject {
         appMonitor.didUnblockApp()
     }
 
+    /// Stop active biometrics while preserving the blocked app and overlay state.
+    /// Used by App Window mode when the protected app is no longer frontmost.
+    func suspendCurrentLockAuthentication() {
+        guard let bundleId = currentlyBlockedApp else { return }
+        windowAlignmentTimer?.invalidate()
+        windowAlignmentTimer = nil
+        AuthenticationManager.shared.stopFaceAuth(owner: .appLock(bundleId))
+        AuthenticationManager.shared.stopTouchIDAuth(owner: .appLock(bundleId))
+    }
+
     /// Bring existing overlay panels back to the front of the window stack.
     /// Called when the user Cmd+Tabs or clicks back to a locked app in App Window mode.
     func bringOverlaysToFront() {
@@ -314,6 +315,16 @@ final class AppLocker: ObservableObject {
             first.makeKeyAndOrderFront(nil)
         }
         NSApp.activate(ignoringOtherApps: true)
+
+        if let app = blockedRunningApp, let bundleId = currentlyBlockedApp {
+            let appName = LockedAppsManager.shared.displayName(for: bundleId) ?? "Application"
+            startWindowAlignmentTimer(for: app.processIdentifier, appName: appName, bundleIdentifier: bundleId)
+        }
+
+        if case .authenticating = AuthenticationManager.shared.authState {
+            return
+        }
+        NotificationCenter.default.post(name: .authOverlayDidBecomeActive, object: currentlyBlockedApp)
     }
 
     // MARK: - App Window Mode Helpers

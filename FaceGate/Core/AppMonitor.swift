@@ -128,6 +128,7 @@ final class AppMonitor: ObservableObject {
         if isProtectionDisabled() { return }
 
         guard let bundleId = app.bundleIdentifier else { return }
+        guard !AuthenticationManager.shared.isTouchIDInProgress else { return }
 
         // If we are currently blocking an app...
         if let blockedApp = blockedApp {
@@ -162,9 +163,10 @@ final class AppMonitor: ObservableObject {
                     // The new app is either not locked or has an active session.
                     let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
                     if overlayMode == 0 {
-                        guard !AuthenticationManager.shared.isTouchIDInProgress else { return }
                         // Only hide and dismiss on switch-away in Full Screen mode
                         AppLocker.shared.handleSwitchAway()
+                    } else {
+                        AppLocker.shared.suspendCurrentLockAuthentication()
                     }
                     return
                 }
