@@ -21,6 +21,10 @@ final class AuthenticationManager: ObservableObject {
     private let touchIDAuth = TouchIDAuth.shared
     let faceAuthManager = FaceAuthManager()
 
+    /// Continuation to execute after authentication resolves (e.g. opening Settings).
+    /// Used instead of creating a second LAContext, which triggers a dual-auth/stuck-overlay bug.
+    var pendingContinuation: (() -> Void)?
+
     private init() {}
 
     enum AuthOwner: Equatable {
@@ -116,8 +120,10 @@ final class AuthenticationManager: ObservableObject {
             authState = .idle
         }
         if owner == nil || currentAuthOwner == owner {
-            currentSessionID = nil
-            currentAuthOwner = nil
+            if !touchIDInProgress {
+                currentSessionID = nil
+                currentAuthOwner = nil
+            }
         }
     }
 
@@ -196,6 +202,21 @@ final class AuthenticationManager: ObservableObject {
         }
     }
 
+    /// Cancel all in-progress authentication and clear pending state.
+    /// Called when the user switches to a different protected app.
+    func cancelCurrentAuthentication() {
+        stopTouchIDAuth()
+        stopFaceAuth()
+        pendingContinuation = nil
+        authState = .idle
+    }
+
+    /// Called after authentication completes (success, cancel, or switch-away)
+    /// to clear the pending continuation.
+    func finishAuthentication() {
+        pendingContinuation = nil
+    }
+
     /// Authenticate using the app password.
     /// - Parameter password: The password the user entered.
     /// - Returns: `true` if authentication succeeded.
@@ -223,8 +244,8 @@ final class AuthenticationManager: ObservableObject {
         lockoutTimer?.invalidate()
         lockoutTimer = nil
         authState = .idle
-        stopFaceAuth()
         stopTouchIDAuth()
+        stopFaceAuth()
     }
 
     // MARK: - Private

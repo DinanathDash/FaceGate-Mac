@@ -201,8 +201,8 @@ struct AuthOverlayView: View {
         }
         .onDisappear {
             cancelAllPendingWorkItems()
-            authManager.stopFaceAuth(owner: authOwner)
             authManager.stopTouchIDAuth(owner: authOwner)
+            authManager.stopFaceAuth(owner: authOwner)
         }
         .onReceive(NotificationCenter.default.publisher(for: .authOverlayDidBecomeActive)) { notification in
             guard isPrimary else { return }

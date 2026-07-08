@@ -142,6 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func cleanup() {
         AppLocker.shared.dismissOverlays()
         AppMonitor.shared.stopMonitoring()
+        AuthenticationManager.shared.stopTouchIDAuth()
         AuthenticationManager.shared.stopFaceAuth()
         UserDefaults.standard.set(false, forKey: FGConstants.protectionDisabledKey)
         UserDefaults.standard.removeObject(forKey: FGConstants.protectionDisableExpiryKey)
@@ -163,13 +164,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         if let blockedApp = AppLocker.shared.currentlyBlockedApp,
            NSWorkspace.shared.frontmostApplication?.bundleIdentifier == blockedApp {
-            AppLocker.shared.onUnlockAction = { [weak self] in
+            // Use pendingContinuation instead of ActionAuthWindow (which creates a 2nd LAContext).
+            AuthenticationManager.shared.pendingContinuation = { [weak self] in
                 self?.openSettingsWindowBypassingAuth()
             }
-            // Ensure the overlay is key
-            if let panel = NSApp.windows.first(where: { $0 is AuthOverlayPanel && $0.isVisible }) {
-                panel.makeKeyAndOrderFront(nil)
-            }
+            AppLocker.shared.bringOverlaysToFront()
             return
         } else if AppLocker.shared.currentlyBlockedApp != nil {
             AppLocker.shared.suspendCurrentLockAuthentication()

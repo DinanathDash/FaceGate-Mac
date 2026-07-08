@@ -69,7 +69,11 @@ final class AppLocker: ObservableObject {
         let action = onUnlockAction
         onUnlockAction = nil
 
-        // Stop face authentication.
+        let continuation = AuthenticationManager.shared.pendingContinuation
+        AuthenticationManager.shared.finishAuthentication()
+
+        // Stop any in-progress biometric authentication.
+        AuthenticationManager.shared.stopTouchIDAuth()
         AuthenticationManager.shared.stopFaceAuth()
 
         // Create an unlock session (no-op for "lock immediately" — duration is 0).
@@ -86,12 +90,14 @@ final class AppLocker: ObservableObject {
         }
 
         action?()
+        continuation?()
     }
 
     /// Called when authentication fails and user chooses to cancel.
     /// Terminates the locked app instead of revealing it.
     func terminateBlockedApp() {
         dismissOverlays()
+        AuthenticationManager.shared.stopTouchIDAuth()
         AuthenticationManager.shared.stopFaceAuth()
 
         if let app = blockedRunningApp {
@@ -108,6 +114,7 @@ final class AppLocker: ObservableObject {
         currentlyBlockedApp = nil
         blockedRunningApp = nil
         onUnlockAction = nil
+        AuthenticationManager.shared.finishAuthentication()
         appMonitor.didUnblockApp()
     }
 
@@ -302,9 +309,10 @@ final class AppLocker: ObservableObject {
     func handleSwitchAway() {
         // Don't hide the app — interferes with Touch ID focus.
         dismissOverlays()
-        AuthenticationManager.shared.stopFaceAuth()
         AuthenticationManager.shared.stopTouchIDAuth()
+        AuthenticationManager.shared.stopFaceAuth()
         onUnlockAction = nil
+        AuthenticationManager.shared.finishAuthentication()
         currentlyBlockedApp = nil
         blockedRunningApp = nil
         appMonitor.didUnblockApp()
@@ -316,8 +324,8 @@ final class AppLocker: ObservableObject {
         guard let bundleId = currentlyBlockedApp else { return }
         windowAlignmentTimer?.invalidate()
         windowAlignmentTimer = nil
-        AuthenticationManager.shared.stopFaceAuth(owner: .appLock(bundleId))
         AuthenticationManager.shared.stopTouchIDAuth(owner: .appLock(bundleId))
+        AuthenticationManager.shared.stopFaceAuth(owner: .appLock(bundleId))
     }
 
     /// Bring existing overlay panels back to the front of the window stack.
@@ -459,13 +467,37 @@ final class AppLocker: ObservableObject {
                 }
             }
         } else {
-            // Window configuration changed — need to recreate overlays.
-            // However, if authentication is actively in progress (Touch ID dialog,
-            // face auth camera session), destroying panels now would kill the live
-            // auth session and orphan the system Touch ID dialog. Defer the
-            // transition — the timer fires again in 2s and will catch it.
-            if case .authenticating = AuthenticationManager.shared.authState { return }
-            showOverlays(for: bundleIdentifier)
+            let removedIDs = existingIDs.subtracting(newIDs)
+
+            if case .authenticating = AuthenticationManager.shared.authState {
+                guard removedIDs.isEmpty else {
+                    return
+                }
+            }
+
+            if !removedIDs.isEmpty {
+                showOverlays(for: bundleIdentifier)
+                return
+            }
+
+            let added = windows.filter { !existingIDs.contains($0.0) }
+            let appName = LockedAppsManager.shared.displayName(for: bundleIdentifier) ?? "Application"
+            for (windowID, frame) in added {
+                let adjustedFrame = calculateOverlayFrame(from: convertQuartzToAppKit(rect: frame))
+                let panel = AuthOverlayPanel(
+                    frame: adjustedFrame,
+                    appName: appName,
+                    bundleIdentifier: bundleIdentifier,
+                    onAuthenticated: { [weak self] in
+                        self?.unlockCurrentApp()
+                    },
+                    onCancel: { [weak self] in
+                        self?.terminateBlockedApp()
+                    }
+                )
+                panel.orderFront(nil)
+                overlayPanels[windowID] = panel
+            }
         }
     }
 

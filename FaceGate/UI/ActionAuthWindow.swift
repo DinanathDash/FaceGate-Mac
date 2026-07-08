@@ -29,6 +29,7 @@ final class ActionAuthWindow: NSPanel {
             onAuthenticated: {
                 let cachedWindow = activeWindow
                 activeWindow = nil
+                AuthenticationManager.shared.stopTouchIDAuth()
                 cachedWindow?.close()
                 AuthenticationManager.shared.stopFaceAuth()
                 onAuthenticated()
@@ -36,6 +37,7 @@ final class ActionAuthWindow: NSPanel {
             onCancel: {
                 let cachedWindow = activeWindow
                 activeWindow = nil
+                AuthenticationManager.shared.stopTouchIDAuth()
                 cachedWindow?.close()
                 AuthenticationManager.shared.stopFaceAuth()
                 onCancelled?()
@@ -92,6 +94,7 @@ final class ActionAuthWindow: NSPanel {
     override var canBecomeMain: Bool { true }
 
     deinit {
+        AuthenticationManager.shared.stopTouchIDAuth()
         AuthenticationManager.shared.stopFaceAuth()
     }
 }
