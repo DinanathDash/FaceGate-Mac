@@ -6,6 +6,8 @@ import SwiftUI
 final class ActionAuthWindow: NSPanel {
     private static var activeWindow: ActionAuthWindow?
 
+    static var sharedActiveWindow: ActionAuthWindow? { activeWindow }
+
     /// Show the authentication window for a specific action/reason.
     /// - Parameters:
     ///   - reason: Display name of the action (e.g. "FaceGate Settings").

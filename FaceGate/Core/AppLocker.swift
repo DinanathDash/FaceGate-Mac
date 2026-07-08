@@ -160,6 +160,10 @@ final class AppLocker: ObservableObject {
             panel.level = .statusBar
             panel.ignoresMouseEvents = true
         }
+        if let actionWindow = ActionAuthWindow.sharedActiveWindow {
+            actionWindow.level = .statusBar
+            actionWindow.ignoresMouseEvents = true
+        }
     }
 
     /// Restore overlays after Touch ID completes (reverses setTouchIDMode).
@@ -169,6 +173,10 @@ final class AppLocker: ObservableObject {
         for panel in overlayPanels.values {
             panel.level = defaultLevel
             panel.ignoresMouseEvents = false
+        }
+        if let actionWindow = ActionAuthWindow.sharedActiveWindow {
+            actionWindow.level = .floating
+            actionWindow.ignoresMouseEvents = false
         }
     }
 
