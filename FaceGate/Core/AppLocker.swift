@@ -459,7 +459,12 @@ final class AppLocker: ObservableObject {
                 }
             }
         } else {
-            // If window configuration changed, recreate the overlays
+            // Window configuration changed — need to recreate overlays.
+            // However, if authentication is actively in progress (Touch ID dialog,
+            // face auth camera session), destroying panels now would kill the live
+            // auth session and orphan the system Touch ID dialog. Defer the
+            // transition — the timer fires again in 2s and will catch it.
+            if case .authenticating = AuthenticationManager.shared.authState { return }
             showOverlays(for: bundleIdentifier)
         }
     }
