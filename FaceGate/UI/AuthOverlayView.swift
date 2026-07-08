@@ -29,6 +29,9 @@ struct AuthOverlayView: View {
     @State private var touchIDSuccessWorkItem: DispatchWorkItem? = nil
     @State private var reclaimFocusWorkItem: DispatchWorkItem? = nil
     @State private var shakeCancelWorkItem: DispatchWorkItem? = nil
+    @State private var authSuccessWorkItem: DispatchWorkItem? = nil
+    @State private var passwordFocusWorkItem1: DispatchWorkItem? = nil
+    @State private var passwordFocusWorkItem2: DispatchWorkItem? = nil
 
     private func cancelTouchIDWorkItems() {
         touchIDStartWorkItem?.cancel()
@@ -43,6 +46,12 @@ struct AuthOverlayView: View {
         cancelTouchIDWorkItems()
         shakeCancelWorkItem?.cancel()
         shakeCancelWorkItem = nil
+        authSuccessWorkItem?.cancel()
+        authSuccessWorkItem = nil
+        passwordFocusWorkItem1?.cancel()
+        passwordFocusWorkItem1 = nil
+        passwordFocusWorkItem2?.cancel()
+        passwordFocusWorkItem2 = nil
     }
 
     var body: some View {
@@ -214,13 +223,15 @@ struct AuthOverlayView: View {
         }
         .onChangeCompat(of: authManager.authState) { newState in
             if case .success = newState {
-                // Small delay for visual feedback before dismissing.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                authSuccessWorkItem?.cancel()
+                let workItem = DispatchWorkItem {
                     guard !didAuthenticate else { return }
                     didAuthenticate = true
                     onAuthenticated()
                     authManager.resetAttempts()
                 }
+                authSuccessWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
             }
         }
         .onChangeCompat(of: faceAuthManager.state) { newState in
@@ -605,14 +616,21 @@ struct AuthOverlayView: View {
         withAnimation {
             showPasswordField = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        passwordFocusWorkItem1?.cancel()
+        let workItem1 = DispatchWorkItem {
             isPasswordFocused = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        passwordFocusWorkItem1 = workItem1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem1)
+
+        passwordFocusWorkItem2?.cancel()
+        let workItem2 = DispatchWorkItem {
             if !isPasswordFocused {
                 isPasswordFocused = true
             }
         }
+        passwordFocusWorkItem2 = workItem2
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem2)
     }
 
     private func submitPassword() {

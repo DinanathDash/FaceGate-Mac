@@ -69,6 +69,7 @@ final class AuthOverlayPanel: NSPanel {
         frame: NSRect,
         appName: String,
         bundleIdentifier: String,
+        isPrimary: Bool = true,
         onAuthenticated: @escaping () -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -101,6 +102,7 @@ final class AuthOverlayPanel: NSPanel {
             appName: appName,
             appIcon: appIcon,
             authOwner: .appLock(bundleIdentifier),
+            isPrimary: isPrimary,
             onAuthenticated: onAuthenticated,
             onCancel: onCancel
         )

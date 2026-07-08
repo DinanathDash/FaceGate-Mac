@@ -190,12 +190,14 @@ final class AppLocker: ObservableObject {
         if overlayMode == 1, let app = blockedRunningApp {
             let windows = getAppWindowFrames(for: app.processIdentifier)
             if !windows.isEmpty {
-                for (windowID, frame) in windows {
+                for (index, (windowID, frame)) in windows.enumerated() {
                     let adjustedFrame = calculateOverlayFrame(from: convertQuartzToAppKit(rect: frame))
+                    let isPrimary = index == 0
                     let panel = AuthOverlayPanel(
                         frame: adjustedFrame,
                         appName: appName,
                         bundleIdentifier: bundleIdentifier,
+                        isPrimary: isPrimary,
                         onAuthenticated: { [weak self] in
                             self?.unlockCurrentApp()
                         },
@@ -468,11 +470,44 @@ final class AppLocker: ObservableObject {
             }
         } else {
             let removedIDs = existingIDs.subtracting(newIDs)
+            let addedIDs = newIDs.subtracting(existingIDs)
 
+            let isAuthenticating: Bool
             if case .authenticating = AuthenticationManager.shared.authState {
-                guard removedIDs.isEmpty else {
-                    return
+                isAuthenticating = true
+            } else {
+                isAuthenticating = false
+            }
+
+            if isAuthenticating {
+                // During active auth: handle removals individually without
+                // destroying the existing auth session. New window panels
+                // are non-primary to prevent dual auth on the same app.
+                for removedID in removedIDs {
+                    overlayPanels[removedID]?.orderOut(nil)
+                    overlayPanels[removedID] = nil
                 }
+                if addedIDs.isEmpty { return }
+                let appName = LockedAppsManager.shared.displayName(for: bundleIdentifier) ?? "Application"
+                let hasExistingPanel = !overlayPanels.isEmpty
+                for (windowID, frame) in windows where addedIDs.contains(windowID) {
+                    let adjustedFrame = calculateOverlayFrame(from: convertQuartzToAppKit(rect: frame))
+                    let panel = AuthOverlayPanel(
+                        frame: adjustedFrame,
+                        appName: appName,
+                        bundleIdentifier: bundleIdentifier,
+                        isPrimary: !hasExistingPanel,
+                        onAuthenticated: { [weak self] in
+                            self?.unlockCurrentApp()
+                        },
+                        onCancel: { [weak self] in
+                            self?.terminateBlockedApp()
+                        }
+                    )
+                    panel.orderFront(nil)
+                    overlayPanels[windowID] = panel
+                }
+                return
             }
 
             if !removedIDs.isEmpty {
@@ -488,6 +523,7 @@ final class AppLocker: ObservableObject {
                     frame: adjustedFrame,
                     appName: appName,
                     bundleIdentifier: bundleIdentifier,
+                    isPrimary: false,
                     onAuthenticated: { [weak self] in
                         self?.unlockCurrentApp()
                     },
