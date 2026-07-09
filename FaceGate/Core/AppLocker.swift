@@ -18,8 +18,6 @@ final class AppLocker: ObservableObject {
     /// Active overlay panels mapped by window IDs (or dummy IDs for fullscreen).
     private var overlayPanels: [CGWindowID: AuthOverlayPanel] = [:]
 
-    /// One-shot work item to check for windows after a delay when an app is launching.
-    private var windowDetectionWorkItem: DispatchWorkItem?
 
     /// Timer used to periodically realign overlays if the locked app's windows move/resize.
     private var windowAlignmentTimer: Timer?
@@ -46,25 +44,14 @@ final class AppLocker: ObservableObject {
         blockedRunningApp = runningApp
         appMonitor.didBlockApp(bundleIdentifier)
 
-        // Step 1: Immediately hide the locked app if in Full Screen mode.
-        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
-        if overlayMode == 0 {
-            runningApp.hide()
-        } else {
-            runningApp.activate(options: [.activateIgnoringOtherApps])
-        }
-
-        // Start Face ID authentication if available.
-        if AuthenticationManager.shared.isFaceUnlockAvailable {
-            AuthenticationManager.shared.authenticateWithFace { [weak self] success in
-                if success {
-                    self?.unlockCurrentApp()
-                }
-            }
-        }
-
-        // Step 2: Present auth overlays.
+        // Step 1: Present auth overlays FIRST so the locked app's content is never
+        // visible to the user. This prevents the privacy flash described in Bug 4.
         showOverlays(for: bundleIdentifier)
+
+        // Step 2: Bring the locked app forward so macOS stays on its space.
+        // Use orderFront-style activation — don't make it key or steal focus,
+        // as the system Touch ID dialog needs uncontested focus (MakLock pattern).
+        runningApp.activate(options: [])
     }
 
     /// Called when authentication succeeds — reveal the app and dismiss overlays.
@@ -82,7 +69,11 @@ final class AppLocker: ObservableObject {
         let action = onUnlockAction
         onUnlockAction = nil
 
-        // Stop face authentication.
+        let continuation = AuthenticationManager.shared.pendingContinuation
+        AuthenticationManager.shared.finishAuthentication()
+
+        // Stop any in-progress biometric authentication.
+        AuthenticationManager.shared.stopTouchIDAuth()
         AuthenticationManager.shared.stopFaceAuth()
 
         // Create an unlock session (no-op for "lock immediately" — duration is 0).
@@ -99,12 +90,14 @@ final class AppLocker: ObservableObject {
         }
 
         action?()
+        continuation?()
     }
 
     /// Called when authentication fails and user chooses to cancel.
     /// Terminates the locked app instead of revealing it.
     func terminateBlockedApp() {
         dismissOverlays()
+        AuthenticationManager.shared.stopTouchIDAuth()
         AuthenticationManager.shared.stopFaceAuth()
 
         if let app = blockedRunningApp {
@@ -121,13 +114,12 @@ final class AppLocker: ObservableObject {
         currentlyBlockedApp = nil
         blockedRunningApp = nil
         onUnlockAction = nil
+        AuthenticationManager.shared.finishAuthentication()
         appMonitor.didUnblockApp()
     }
 
     /// Dismiss all overlays without unlocking (e.g., if FaceGate is quitting).
     func dismissOverlays() {
-        windowDetectionWorkItem?.cancel()
-        windowDetectionWorkItem = nil
         windowAlignmentTimer?.invalidate()
         windowAlignmentTimer = nil
         if let observer = windowActivationObserver {
@@ -147,6 +139,41 @@ final class AppLocker: ObservableObject {
         }
     }
 
+    /// Restore the overlay panels to their default window level based on the active shield mode.
+    func restoreOverlayWindowLevel() {
+        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
+        let defaultLevel: NSWindow.Level = (overlayMode == 1) ? .floating : .screenSaver
+        setOverlayWindowLevel(defaultLevel)
+    }
+
+    /// Configure overlays for Touch ID: lower window level and enable mouse event
+    /// passthrough so the system Touch ID dialog can receive focus and events.
+    /// Mirrors the pattern used by MakLock's OverlayWindowService.setTouchIDMode(_:).
+    func setTouchIDMode() {
+        for panel in overlayPanels.values {
+            panel.level = .statusBar
+            panel.ignoresMouseEvents = true
+        }
+        if let actionWindow = ActionAuthWindow.sharedActiveWindow {
+            actionWindow.level = .statusBar
+            actionWindow.ignoresMouseEvents = true
+        }
+    }
+
+    /// Restore overlays after Touch ID completes (reverses setTouchIDMode).
+    func restoreTouchIDMode() {
+        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
+        let defaultLevel: NSWindow.Level = (overlayMode == 1) ? .floating : .screenSaver
+        for panel in overlayPanels.values {
+            panel.level = defaultLevel
+            panel.ignoresMouseEvents = false
+        }
+        if let actionWindow = ActionAuthWindow.sharedActiveWindow {
+            actionWindow.level = .floating
+            actionWindow.ignoresMouseEvents = false
+        }
+    }
+
     // MARK: - Private
 
     /// Create and show auth overlay panels.
@@ -163,12 +190,14 @@ final class AppLocker: ObservableObject {
         if overlayMode == 1, let app = blockedRunningApp {
             let windows = getAppWindowFrames(for: app.processIdentifier)
             if !windows.isEmpty {
-                for (windowID, frame) in windows {
+                for (index, (windowID, frame)) in windows.enumerated() {
                     let adjustedFrame = calculateOverlayFrame(from: convertQuartzToAppKit(rect: frame))
+                    let isPrimary = index == 0
                     let panel = AuthOverlayPanel(
                         frame: adjustedFrame,
                         appName: appName,
                         bundleIdentifier: bundleIdentifier,
+                        isPrimary: isPrimary,
                         onAuthenticated: { [weak self] in
                             self?.unlockCurrentApp()
                         },
@@ -187,16 +216,66 @@ final class AppLocker: ObservableObject {
                 // Track window updates periodically
                 startWindowAlignmentTimer(for: app.processIdentifier, appName: appName, bundleIdentifier: bundleIdentifier)
             } else {
-                // If no window found (e.g. launching), show a temporary full screen shield on main screen and poll.
-                showTemporaryFullScreenOverlay(appName: appName, bundleIdentifier: bundleIdentifier)
+                // No windows yet (app is cold-launching). Show a full-screen overlay as the
+                // secure initial state, and let the windowAlignmentTimer handle the transition
+                // to window-specific overlays once the app's windows materialize.
+                if let screen = activeScreen {
+                    let panel = AuthOverlayPanel(
+                        screen: screen,
+                        appName: appName,
+                        bundleIdentifier: bundleIdentifier,
+                        onAuthenticated: { [weak self] in
+                            self?.unlockCurrentApp()
+                        },
+                        onCancel: { [weak self] in
+                            self?.terminateBlockedApp()
+                        }
+                    )
+                    panel.makeKeyAndOrderFront(nil)
+                    overlayPanels[0] = panel
+                }
+
+                // Start the alignment timer — when windows appear, alignOverlayWindows will
+                // detect the ID mismatch ({0} vs real IDs) and call showOverlays to transition.
+                startWindowAlignmentTimer(for: app.processIdentifier, appName: appName, bundleIdentifier: bundleIdentifier)
             }
         } else {
-            // Present auth overlays on all screens.
-            for (index, screen) in screens.enumerated() {
+            var targetScreens: [(index: Int, screen: NSScreen)] = []
+
+            if let app = blockedRunningApp {
+                let appWindows = getAppWindowFrames(for: app.processIdentifier)
+                if !appWindows.isEmpty {
+                    var seenIndices = Set<Int>()
+                    for (index, screen) in screens.enumerated() {
+                        for (_, windowFrame) in appWindows {
+                            let appKitFrame = convertQuartzToAppKit(rect: windowFrame)
+                            if screen.frame.intersects(appKitFrame) {
+                                if seenIndices.insert(index).inserted {
+                                    targetScreens.append((index: index, screen: screen))
+                                }
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+
+            if targetScreens.isEmpty {
+                if let screen = activeScreen {
+                    let index = screens.firstIndex(of: screen) ?? 0
+                    targetScreens.append((index: index, screen: screen))
+                } else if let screen = screens.first {
+                    targetScreens.append((index: 0, screen: screen))
+                }
+            }
+
+            for (index, screen) in targetScreens {
+                let isScreenPrimary = (targetScreens.count == 1) || (screen == activeScreen)
                 let panel = AuthOverlayPanel(
                     screen: screen,
                     appName: appName,
                     bundleIdentifier: bundleIdentifier,
+                    isPrimary: isScreenPrimary,
                     onAuthenticated: { [weak self] in
                         self?.unlockCurrentApp()
                     },
@@ -204,7 +283,7 @@ final class AppLocker: ObservableObject {
                         self?.terminateBlockedApp()
                     }
                 )
-                if screen == activeScreen {
+                if isScreenPrimary {
                     panel.makeKeyAndOrderFront(nil)
                     panel.makeMain()
                 } else {
@@ -214,11 +293,11 @@ final class AppLocker: ObservableObject {
             }
         }
 
-        // Activate FaceGate so it becomes the active app and can receive keyboard input.
         NSApp.activate(ignoringOtherApps: true)
 
-        // Hiding a running app causes macOS to asynchronously focus the next app.
-        // We activate again on the next runloop tick to override this focus shift.
+        // runningApp.activate(options: []) later in blockApp can steal key status
+        // from the overlay. We re-assert on the next runloop tick to guarantee
+        // the overlay remains key for Touch ID.
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
             if let activeScreen = activeScreen {
@@ -230,16 +309,25 @@ final class AppLocker: ObservableObject {
     /// Called when the user switches focus to another app.
     /// Gracefully hides the blocked application and dismisses overlays.
     func handleSwitchAway() {
-        let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
-        if overlayMode == 0 {
-            blockedRunningApp?.hide()
-        }
+        // Don't hide the app — interferes with Touch ID focus.
         dismissOverlays()
+        AuthenticationManager.shared.stopTouchIDAuth()
         AuthenticationManager.shared.stopFaceAuth()
         onUnlockAction = nil
+        AuthenticationManager.shared.finishAuthentication()
         currentlyBlockedApp = nil
         blockedRunningApp = nil
         appMonitor.didUnblockApp()
+    }
+
+    /// Stop active biometrics while preserving the blocked app and overlay state.
+    /// Used by App Window mode when the protected app is no longer frontmost.
+    func suspendCurrentLockAuthentication() {
+        guard let bundleId = currentlyBlockedApp else { return }
+        windowAlignmentTimer?.invalidate()
+        windowAlignmentTimer = nil
+        AuthenticationManager.shared.stopTouchIDAuth(owner: .appLock(bundleId))
+        AuthenticationManager.shared.stopFaceAuth(owner: .appLock(bundleId))
     }
 
     /// Bring existing overlay panels back to the front of the window stack.
@@ -253,6 +341,16 @@ final class AppLocker: ObservableObject {
             first.makeKeyAndOrderFront(nil)
         }
         NSApp.activate(ignoringOtherApps: true)
+
+        if let app = blockedRunningApp, let bundleId = currentlyBlockedApp {
+            let appName = LockedAppsManager.shared.displayName(for: bundleId) ?? "Application"
+            startWindowAlignmentTimer(for: app.processIdentifier, appName: appName, bundleIdentifier: bundleId)
+        }
+
+        if case .authenticating = AuthenticationManager.shared.authState {
+            return
+        }
+        NotificationCenter.default.post(name: .authOverlayDidBecomeActive, object: currentlyBlockedApp)
     }
 
     // MARK: - App Window Mode Helpers
@@ -371,69 +469,72 @@ final class AppLocker: ObservableObject {
                 }
             }
         } else {
-            // If window configuration changed, recreate the overlays
-            showOverlays(for: bundleIdentifier)
-        }
-    }
+            let removedIDs = existingIDs.subtracting(newIDs)
+            let addedIDs = newIDs.subtracting(existingIDs)
 
-    /// Show a temporary full screen shield on the active screen and wait for the blocked
-    /// app's windows to become available, then transition to window-specific overlays.
-    private func showTemporaryFullScreenOverlay(appName: String, bundleIdentifier: String) {
-        let screens = NSScreen.screens
-        let mouseLocation = NSEvent.mouseLocation
-        guard let activeScreen = screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) ?? NSScreen.main ?? screens.first else { return }
-        guard let pid = blockedRunningApp?.processIdentifier else { return }
-
-        let panel = AuthOverlayPanel(
-            screen: activeScreen,
-            appName: appName,
-            bundleIdentifier: bundleIdentifier,
-            onAuthenticated: { [weak self] in
-                self?.unlockCurrentApp()
-            },
-            onCancel: { [weak self] in
-                self?.terminateBlockedApp()
+            let isAuthenticating: Bool
+            if case .authenticating = AuthenticationManager.shared.authState {
+                isAuthenticating = true
+            } else {
+                isAuthenticating = false
             }
-        )
-        panel.makeKeyAndOrderFront(nil)
-        overlayPanels[0] = panel
 
-        // Remove any prior observer before registering a new one.
-        if let existing = windowActivationObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(existing)
-            windowActivationObserver = nil
-        }
+            if isAuthenticating {
+                // During active auth: handle removals individually without
+                // destroying the existing auth session. New window panels
+                // are non-primary to prevent dual auth on the same app.
+                for removedID in removedIDs {
+                    overlayPanels[removedID]?.orderOut(nil)
+                    overlayPanels[removedID] = nil
+                }
+                if addedIDs.isEmpty { return }
+                let appName = LockedAppsManager.shared.displayName(for: bundleIdentifier) ?? "Application"
+                let hasExistingPanel = !overlayPanels.isEmpty
+                for (windowID, frame) in windows where addedIDs.contains(windowID) {
+                    let adjustedFrame = calculateOverlayFrame(from: convertQuartzToAppKit(rect: frame))
+                    let panel = AuthOverlayPanel(
+                        frame: adjustedFrame,
+                        appName: appName,
+                        bundleIdentifier: bundleIdentifier,
+                        isPrimary: !hasExistingPanel,
+                        onAuthenticated: { [weak self] in
+                            self?.unlockCurrentApp()
+                        },
+                        onCancel: { [weak self] in
+                            self?.terminateBlockedApp()
+                        }
+                    )
+                    panel.orderFront(nil)
+                    overlayPanels[windowID] = panel
+                }
+                return
+            }
 
-        // Register for the blocked app's activation to detect window creation.
-        let center = NSWorkspace.shared.notificationCenter
-        windowActivationObserver = center.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self = self,
-                  let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  app.processIdentifier == pid else { return }
-            self.checkAndTransitionFromTemporaryOverlay(bundleIdentifier: bundleIdentifier)
-        }
+            if !removedIDs.isEmpty {
+                showOverlays(for: bundleIdentifier)
+                return
+            }
 
-        // One-shot delayed check as fallback if the activation notification was missed.
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.checkAndTransitionFromTemporaryOverlay(bundleIdentifier: bundleIdentifier)
+            let added = windows.filter { !existingIDs.contains($0.0) }
+            let appName = LockedAppsManager.shared.displayName(for: bundleIdentifier) ?? "Application"
+            for (windowID, frame) in added {
+                let adjustedFrame = calculateOverlayFrame(from: convertQuartzToAppKit(rect: frame))
+                let panel = AuthOverlayPanel(
+                    frame: adjustedFrame,
+                    appName: appName,
+                    bundleIdentifier: bundleIdentifier,
+                    isPrimary: false,
+                    onAuthenticated: { [weak self] in
+                        self?.unlockCurrentApp()
+                    },
+                    onCancel: { [weak self] in
+                        self?.terminateBlockedApp()
+                    }
+                )
+                panel.orderFront(nil)
+                overlayPanels[windowID] = panel
+            }
         }
-        windowDetectionWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
     }
 
-    /// Check if the blocked app's windows are now available and transition from
-    /// the temporary full-screen shield to window-specific overlays.
-    private func checkAndTransitionFromTemporaryOverlay(bundleIdentifier: String) {
-        guard let app = blockedRunningApp else { return }
-        let windows = getAppWindowFrames(for: app.processIdentifier)
-        if !windows.isEmpty {
-            windowDetectionWorkItem?.cancel()
-            windowDetectionWorkItem = nil
-            showOverlays(for: bundleIdentifier)
-        }
-    }
 }

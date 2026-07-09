@@ -60,8 +60,9 @@ final class TouchIDAuth {
         context.evaluatePolicy(
             .deviceOwnerAuthenticationWithBiometrics,
             localizedReason: reason
-        ) { success, error in
+        ) { [weak self] success, error in
             DispatchQueue.main.async {
+                self?.activeContext = nil
                 if success {
                     completion(.success(()))
                 } else if let laError = error as? LAError {

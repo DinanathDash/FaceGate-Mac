@@ -9,7 +9,9 @@ APP_PATH = $(BUILD_DIR)/$(APP_NAME).app
 DMG_PATH = $(BUILD_DIR)/$(APP_NAME).dmg
 SCHEME = $(APP_NAME)
 
-.PHONY: all clean generate build archive dmg install
+GEN_BUILD_INFO = FaceGate/Utilities/BuildInfo.swift
+
+.PHONY: all clean generate build archive dmg install generate-build-info
 
 # Generate Xcode project from project.yml
 generate:
@@ -17,8 +19,20 @@ generate:
 	xcodegen generate
 	@echo "✓ FaceGate.xcodeproj generated"
 
+# Generate BuildInfo.swift with git hash + timestamp
+# Appends "-dirty" when the working tree has uncommitted changes.
+generate-build-info:
+	@echo "→ Generating build info..."
+	@COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "no-git"); \
+	DIRTY=$$(git status --porcelain 2>/dev/null | head -1 | wc -l | tr -d ' '); \
+	if [ "$$DIRTY" != "0" ]; then COMMIT="$${COMMIT}-dirty"; fi; \
+	TIMESTAMP=$$(date +%Y%m%d-%H%M%S); \
+	echo "Generating build info: commit=$$COMMIT, time=$$TIMESTAMP"; \
+	printf 'import Foundation\n\nenum BuildInfo {\n    static let commitHash = "%s"\n    static let buildDate = "%s"\n    static var identifier: String {\n        "%s-%s"\n    }\n}\n' "$$COMMIT" "$$TIMESTAMP" "$$COMMIT" "$$TIMESTAMP" > $(GEN_BUILD_INFO)
+	@echo "✓ $(GEN_BUILD_INFO) generated"
+
 # Build the app (debug)
-build: generate
+build: generate generate-build-info
 	@echo "→ Building $(APP_NAME) (Debug)..."
 	DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project $(APP_NAME).xcodeproj \
 		-scheme $(SCHEME) \

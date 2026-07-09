@@ -7,7 +7,9 @@ import SwiftUI
 struct AuthOverlayView: View {
     let appName: String
     let appIcon: NSImage
+    let authOwner: AuthenticationManager.AuthOwner
     var isAppLocking: Bool = true
+    var isPrimary: Bool = true
     var cancelButtonTitle: String = "Cancel & Close App"
     var subtitleMessage: String? = nil
     let onAuthenticated: () -> Void
@@ -20,9 +22,37 @@ struct AuthOverlayView: View {
     @State private var showPasswordField: Bool = false
     @State private var showFallbacks: Bool = false
     @State private var shakePassword: Bool = false
-    @State private var faceAuthStarted: Bool = false
     @State private var isTimedOut: Bool = false
     @State private var didAuthenticate: Bool = false
+
+    @State private var touchIDStartWorkItem: DispatchWorkItem? = nil
+    @State private var touchIDSuccessWorkItem: DispatchWorkItem? = nil
+    @State private var reclaimFocusWorkItem: DispatchWorkItem? = nil
+    @State private var shakeCancelWorkItem: DispatchWorkItem? = nil
+    @State private var authSuccessWorkItem: DispatchWorkItem? = nil
+    @State private var passwordFocusWorkItem1: DispatchWorkItem? = nil
+    @State private var passwordFocusWorkItem2: DispatchWorkItem? = nil
+
+    private func cancelTouchIDWorkItems() {
+        touchIDStartWorkItem?.cancel()
+        touchIDStartWorkItem = nil
+        touchIDSuccessWorkItem?.cancel()
+        touchIDSuccessWorkItem = nil
+        reclaimFocusWorkItem?.cancel()
+        reclaimFocusWorkItem = nil
+    }
+
+    private func cancelAllPendingWorkItems() {
+        cancelTouchIDWorkItems()
+        shakeCancelWorkItem?.cancel()
+        shakeCancelWorkItem = nil
+        authSuccessWorkItem?.cancel()
+        authSuccessWorkItem = nil
+        passwordFocusWorkItem1?.cancel()
+        passwordFocusWorkItem1 = nil
+        passwordFocusWorkItem2?.cancel()
+        passwordFocusWorkItem2 = nil
+    }
 
     var body: some View {
         ZStack {
@@ -176,23 +206,32 @@ struct AuthOverlayView: View {
             .animation(.easeInOut(duration: 0.2), value: authManager.authState)
         }
         .onAppear {
-            if !authManager.isFaceUnlockAvailable {
-                if TouchIDAuth.shared.canUse {
-                    authenticateWithTouchID()
-                } else {
-                    showPasswordAuth()
-                }
+            startBiometricAuth()
+        }
+        .onDisappear {
+            cancelAllPendingWorkItems()
+            authManager.stopTouchIDAuth(owner: authOwner)
+            authManager.stopFaceAuth(owner: authOwner)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .authOverlayDidBecomeActive)) { notification in
+            guard isPrimary else { return }
+            if let targetBundle = notification.object as? String,
+               case .appLock(let currentBundle) = authOwner,
+               targetBundle == currentBundle {
+                startBiometricAuth()
             }
         }
         .onChangeCompat(of: authManager.authState) { newState in
             if case .success = newState {
-                // Small delay for visual feedback before dismissing.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                authSuccessWorkItem?.cancel()
+                let workItem = DispatchWorkItem {
                     guard !didAuthenticate else { return }
                     didAuthenticate = true
                     onAuthenticated()
                     authManager.resetAttempts()
                 }
+                authSuccessWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
             }
         }
         .onChangeCompat(of: faceAuthManager.state) { newState in
@@ -340,21 +379,11 @@ struct AuthOverlayView: View {
                     // may still be animating out. Delaying one run-loop tick lets it
                     // fully clear so no phantom chrome is left on screen.
                     NSApp.activate(ignoringOtherApps: true)
-                    if let panel = NSApp.windows.first(where: { $0 is AuthOverlayPanel && $0.isVisible }) {
+                    if let panel = NSApp.windows.first(where: { ($0 is AuthOverlayPanel || $0 is ActionAuthWindow) && $0.isVisible }) {
                         panel.makeKeyAndOrderFront(nil)
                     }
                     DispatchQueue.main.async {
-                        faceAuthStarted = true
-                        authManager.authenticateWithFace { success in
-                            if success {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                    guard !didAuthenticate else { return }
-                                    didAuthenticate = true
-                                    onAuthenticated()
-                                    authManager.resetAttempts()
-                                }
-                            }
-                        }
+                        startBiometricAuth()
                     }
                 }) {
                     HStack(spacing: 10) {
@@ -512,60 +541,111 @@ struct AuthOverlayView: View {
 
     // MARK: - Actions
 
-    private func authenticateWithTouchID() {
-        authManager.stopFaceAuth()
+    private func startBiometricAuth() {
+        guard isPrimary, !didAuthenticate else { return }
+        if case .authenticating = authManager.authState { return }
+        cancelTouchIDWorkItems()
 
-        // Ensure our window is key and active before triggering Touch ID so the system prompt gets focus.
-        NSApp.activate(ignoringOtherApps: true)
-        if let panel = NSApp.windows.first(where: { $0 is AuthOverlayPanel && $0.isVisible }) {
-            panel.makeKeyAndOrderFront(nil)
+        if authManager.isFaceUnlockAvailable {
+            if !showPasswordField {
+                isTimedOut = false
+                showFallbacks = false
+                authManager.authenticateWithFace(owner: authOwner) { _ in }
+            }
+        } else {
+            if TouchIDAuth.shared.canUse {
+                authenticateWithTouchID()
+            } else {
+                showPasswordAuth()
+            }
         }
+    }
 
-        // Delay slightly to let window focus transitions settle before requesting biometric verification.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            authManager.authenticateWithTouchID(appName: appName) { success in
-                // Reclaim focus after the system Touch ID sheet dismisses (Issue #96).
-                // The LAContext sheet steals key status; we restore it so Touch ID
-                // result buttons and the password field are immediately interactive.
-                NSApp.activate(ignoringOtherApps: true)
-                if let panel = NSApp.windows.first(where: { $0 is AuthOverlayPanel && $0.isVisible }) {
-                    panel.makeKeyAndOrderFront(nil)
-                }
-                if !success {
+    private func authenticateWithTouchID() {
+        authManager.stopFaceAuth(owner: authOwner)
+
+        // NOTE: Intentionally NOT calling NSApp.activate or makeKeyAndOrderFront
+        // here — Touch ID dialog needs uncontested focus.
+        AppLocker.shared.setTouchIDMode()
+
+        touchIDStartWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            authManager.authenticateWithTouchID(appName: appName, owner: authOwner) { success in
+                AppLocker.shared.restoreTouchIDMode()
+
+                if success {
+                    touchIDSuccessWorkItem?.cancel()
+                    let successWorkItem = DispatchWorkItem {
+                        guard !didAuthenticate else { return }
+                        didAuthenticate = true
+                        onAuthenticated()
+                        authManager.resetAttempts()
+                    }
+                    touchIDSuccessWorkItem = successWorkItem
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: successWorkItem)
+                } else {
+                    // Reclaim focus after Touch ID dismisses (3 retries).
+                    func reclaimFocus(attemptsLeft: Int) {
+                        guard attemptsLeft > 0 else { return }
+                        if let panel = NSApp.windows.first(where: { ($0 is AuthOverlayPanel || $0 is ActionAuthWindow) && $0.isVisible }) {
+                            NSApp.activate(ignoringOtherApps: true)
+                            panel.makeKeyAndOrderFront(nil)
+                        }
+                        let focusWorkItem = DispatchWorkItem {
+                            reclaimFocus(attemptsLeft: attemptsLeft - 1)
+                        }
+                        reclaimFocusWorkItem = focusWorkItem
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: focusWorkItem)
+                    }
+
+                    reclaimFocus(attemptsLeft: 3)
+
                     withAnimation {
                         showFallbacks = true
                     }
                 }
             }
         }
+        touchIDStartWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
     }
 
     private func showPasswordAuth() {
-        authManager.stopFaceAuth()
+        authManager.stopFaceAuth(owner: authOwner)
         NSApp.activate(ignoringOtherApps: true)
         withAnimation {
             showPasswordField = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        passwordFocusWorkItem1?.cancel()
+        let workItem1 = DispatchWorkItem {
             isPasswordFocused = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        passwordFocusWorkItem1 = workItem1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem1)
+
+        passwordFocusWorkItem2?.cancel()
+        let workItem2 = DispatchWorkItem {
             if !isPasswordFocused {
                 isPasswordFocused = true
             }
         }
+        passwordFocusWorkItem2 = workItem2
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem2)
     }
 
     private func submitPassword() {
         guard !passwordInput.isEmpty else { return }
 
-        let success = authManager.authenticateWithPassword(passwordInput)
+        let success = authManager.authenticateWithPassword(passwordInput, owner: authOwner)
         if !success {
             // Shake animation on failure.
             shakePassword = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            shakeCancelWorkItem?.cancel()
+            let workItem = DispatchWorkItem {
                 shakePassword = false
             }
+            shakeCancelWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: workItem)
             passwordInput = ""
         }
     }

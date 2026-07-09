@@ -27,6 +27,11 @@ final class AppMonitor: ObservableObject {
     /// Tracks the currently blocked app to avoid re-entrant access to AppLocker.currentlyBlockedApp.
     private var blockedApp: String?
 
+    /// Work item for debouncing Protected→Protected app switches.
+    private var debounceWorkItem: DispatchWorkItem?
+    /// Bundle ID of the app the current debounce is targeting.
+    private var debounceTargetBundleID: String?
+
     private init() {}
 
     /// Called by AppLocker when an app is blocked.
@@ -93,6 +98,10 @@ final class AppMonitor: ObservableObject {
     func stopMonitoring() {
         guard isMonitoring else { return }
 
+        debounceWorkItem?.cancel()
+        debounceWorkItem = nil
+        debounceTargetBundleID = nil
+
         let center = NSWorkspace.shared.notificationCenter
 
         if let observer = launchObserver {
@@ -124,10 +133,16 @@ final class AppMonitor: ObservableObject {
     }
 
     private func checkApp(_ app: NSRunningApplication) {
+        // Cancel any pending Protected→Protected debounce.
+        debounceWorkItem?.cancel()
+        debounceWorkItem = nil
+        debounceTargetBundleID = nil
+
         // Check if protection is temporarily disabled.
         if isProtectionDisabled() { return }
 
         guard let bundleId = app.bundleIdentifier else { return }
+        guard !AuthenticationManager.shared.isTouchIDInProgress else { return }
 
         // If we are currently blocking an app...
         if let blockedApp = blockedApp {
@@ -149,20 +164,32 @@ final class AppMonitor: ObservableObject {
                 }
 
                 if isNewAppLocked && !hasSession && !inCooldown {
-                    // The new app needs to be blocked!
-                    // In App Window mode, we must first clear/dismiss the old app's overlays
-                    // before blocking the new one, since AppLocker only manages one block at a time.
+                    // Protected → Protected: cancel auth, mode-dependent overlay handling, debounce.
+                    AuthenticationManager.shared.cancelCurrentAuthentication()
                     let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
                     if overlayMode == 1 {
-                        AppLocker.shared.dismissOverlays()
+                        AppLocker.shared.suspendCurrentLockAuthentication()
+                    } else {
+                        AppLocker.shared.handleSwitchAway()
                     }
-                    // Do NOT return here. Let the code flow down to block the new app.
+                    debounceTargetBundleID = bundleId
+                    debounceWorkItem = DispatchWorkItem { [weak self] in
+                        guard let self = self,
+                              let frontApp = NSWorkspace.shared.frontmostApplication,
+                              frontApp.bundleIdentifier == self.debounceTargetBundleID
+                        else { return }
+                        self.onLockedAppDetected?(frontApp.bundleIdentifier!, frontApp)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: debounceWorkItem!)
+                    return
                 } else {
                     // The new app is either not locked or has an active session.
                     let overlayMode = UserDefaults.standard.integer(forKey: FGConstants.authOverlayModeKey)
                     if overlayMode == 0 {
                         // Only hide and dismiss on switch-away in Full Screen mode
                         AppLocker.shared.handleSwitchAway()
+                    } else {
+                        AppLocker.shared.suspendCurrentLockAuthentication()
                     }
                     return
                 }

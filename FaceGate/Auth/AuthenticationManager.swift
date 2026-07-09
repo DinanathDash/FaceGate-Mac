@@ -21,7 +21,16 @@ final class AuthenticationManager: ObservableObject {
     private let touchIDAuth = TouchIDAuth.shared
     let faceAuthManager = FaceAuthManager()
 
+    /// Continuation to execute after authentication resolves (e.g. opening Settings).
+    /// Used instead of creating a second LAContext, which triggers a dual-auth/stuck-overlay bug.
+    var pendingContinuation: (() -> Void)?
+
     private init() {}
+
+    enum AuthOwner: Equatable {
+        case appLock(String)
+        case action(String)
+    }
 
     // MARK: - Auth State
 
@@ -61,17 +70,35 @@ final class AuthenticationManager: ObservableObject {
 
     /// Authenticate using Face Unlock.
     /// - Parameter completion: Called with the result.
-    func authenticateWithFace(completion: @escaping (Bool) -> Void) {
+    func authenticateWithFace(owner: AuthOwner, completion: @escaping (Bool) -> Void) {
         guard !isLockedOut else {
             completion(false)
             return
         }
+
+        guard !faceAuthInProgress else {
+            completion(false)
+            return
+        }
+
+        stopTouchIDAuth() // Ensure pending Touch ID is cancelled before starting face auth
+
+        let sessionID = UUID()
+        currentSessionID = sessionID
+        currentAuthOwner = owner
+        faceAuthInProgress = true
 
         authState = .authenticating(.faceUnlock)
 
         faceAuthManager.startAuthentication { [weak self] success in
             guard let self = self else { return }
             DispatchQueue.main.async {
+                guard self.currentSessionID == sessionID,
+                      self.currentAuthOwner == owner,
+                      self.faceAuthInProgress else { return }
+                self.faceAuthInProgress = false
+                self.currentSessionID = nil
+                self.currentAuthOwner = nil
                 if success {
                     self.onAuthSuccess()
                     completion(true)
@@ -85,23 +112,62 @@ final class AuthenticationManager: ObservableObject {
     }
 
     /// Stop any in-progress face authentication.
-    func stopFaceAuth() {
+    func stopFaceAuth(owner: AuthOwner? = nil) {
+        guard owner == nil || currentAuthOwner == owner else { return }
         faceAuthManager.stopAuthentication()
+        faceAuthInProgress = false
+        if case .authenticating(let method) = authState, method == .faceUnlock {
+            authState = .idle
+        }
+        if owner == nil || currentAuthOwner == owner {
+            if !touchIDInProgress {
+                currentSessionID = nil
+                currentAuthOwner = nil
+            }
+        }
     }
+
+    /// Prevents duplicate Touch ID prompts when multiple overlay panels fire
+    /// onAppear simultaneously (e.g. multi-monitor setups).
+    private var touchIDInProgress = false
+    private var faceAuthInProgress = false
+    private var currentSessionID: UUID?
+    private var currentAuthOwner: AuthOwner?
+
+    /// Whether a Touch ID evaluation is currently in progress.
+    /// Used by AppMonitor to suppress switch-away handling during the system
+    /// Touch ID dialog (which causes a transient app-activation for SecurityAgent).
+    var isTouchIDInProgress: Bool { touchIDInProgress }
 
     /// Authenticate using Touch ID.
     /// - Parameter appName: Name of the app being unlocked (shown in Touch ID dialog).
     /// - Parameter completion: Called with the result.
-    func authenticateWithTouchID(appName: String, completion: @escaping (Bool) -> Void) {
+    func authenticateWithTouchID(appName: String, owner: AuthOwner, completion: @escaping (Bool) -> Void) {
         guard !isLockedOut else {
             completion(false)
             return
         }
 
+        guard !touchIDInProgress else {
+            completion(false)
+            return
+        }
+
+        let sessionID = UUID()
+        currentSessionID = sessionID
+        currentAuthOwner = owner
+        touchIDInProgress = true
         authState = .authenticating(.touchID)
 
         touchIDAuth.authenticate(reason: "Unlock \(appName)") { [weak self] result in
             guard let self = self else { return }
+            guard self.currentSessionID == sessionID,
+                  self.currentAuthOwner == owner,
+                  self.touchIDInProgress else { return }
+            self.touchIDInProgress = false
+            self.currentSessionID = nil
+            self.currentAuthOwner = nil
+            AppLocker.shared.restoreTouchIDMode()
             // Ignore stale callbacks from cancelled/invalidated LAContext that arrive
             // after another auth method (e.g. password) already changed the state.
             guard case .authenticating(.touchID) = self.authState else { return }
@@ -122,21 +188,44 @@ final class AuthenticationManager: ObservableObject {
     }
 
     /// Stop any in-progress Touch ID authentication.
-    func stopTouchIDAuth() {
+    func stopTouchIDAuth(owner: AuthOwner? = nil) {
+        guard owner == nil || currentAuthOwner == owner else { return }
         touchIDAuth.cancelAuthentication()
+        touchIDInProgress = false
+        AppLocker.shared.restoreTouchIDMode()
         if case .authenticating(let method) = authState, method == .touchID {
             authState = .idle
         }
+        if owner == nil || currentAuthOwner == owner {
+            currentSessionID = nil
+            currentAuthOwner = nil
+        }
+    }
+
+    /// Cancel all in-progress authentication and clear pending state.
+    /// Called when the user switches to a different protected app.
+    func cancelCurrentAuthentication() {
+        stopTouchIDAuth()
+        stopFaceAuth()
+        pendingContinuation = nil
+        authState = .idle
+    }
+
+    /// Called after authentication completes (success, cancel, or switch-away)
+    /// to clear the pending continuation.
+    func finishAuthentication() {
+        pendingContinuation = nil
     }
 
     /// Authenticate using the app password.
     /// - Parameter password: The password the user entered.
     /// - Returns: `true` if authentication succeeded.
-    func authenticateWithPassword(_ password: String) -> Bool {
+    func authenticateWithPassword(_ password: String, owner: AuthOwner? = nil) -> Bool {
         guard !isLockedOut else { return false }
 
         stopTouchIDAuth() // Ensure Touch ID is cancelled if active
-        
+        stopFaceAuth(owner: owner)
+
         authState = .authenticating(.appPassword)
 
         if passwordAuth.verifyPassword(password) {
@@ -155,6 +244,7 @@ final class AuthenticationManager: ObservableObject {
         lockoutTimer?.invalidate()
         lockoutTimer = nil
         authState = .idle
+        stopTouchIDAuth()
         stopFaceAuth()
     }
 

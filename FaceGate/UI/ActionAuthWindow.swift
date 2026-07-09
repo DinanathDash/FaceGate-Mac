@@ -6,6 +6,8 @@ import SwiftUI
 final class ActionAuthWindow: NSPanel {
     private static var activeWindow: ActionAuthWindow?
 
+    static var sharedActiveWindow: ActionAuthWindow? { activeWindow }
+
     /// Show the authentication window for a specific action/reason.
     /// - Parameters:
     ///   - reason: Display name of the action (e.g. "FaceGate Settings").
@@ -27,6 +29,7 @@ final class ActionAuthWindow: NSPanel {
             onAuthenticated: {
                 let cachedWindow = activeWindow
                 activeWindow = nil
+                AuthenticationManager.shared.stopTouchIDAuth()
                 cachedWindow?.close()
                 AuthenticationManager.shared.stopFaceAuth()
                 onAuthenticated()
@@ -34,6 +37,7 @@ final class ActionAuthWindow: NSPanel {
             onCancel: {
                 let cachedWindow = activeWindow
                 activeWindow = nil
+                AuthenticationManager.shared.stopTouchIDAuth()
                 cachedWindow?.close()
                 AuthenticationManager.shared.stopFaceAuth()
                 onCancelled?()
@@ -45,10 +49,6 @@ final class ActionAuthWindow: NSPanel {
         panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-
-        if AuthenticationManager.shared.isFaceUnlockAvailable {
-            AuthenticationManager.shared.authenticateWithFace { _ in }
-        }
     }
 
     init(
@@ -77,6 +77,7 @@ final class ActionAuthWindow: NSPanel {
         let overlayView = AuthOverlayView(
             appName: reason,
             appIcon: appIcon,
+            authOwner: .action(reason),
             isAppLocking: false,
             cancelButtonTitle: "Cancel",
             onAuthenticated: onAuthenticated,
@@ -93,6 +94,7 @@ final class ActionAuthWindow: NSPanel {
     override var canBecomeMain: Bool { true }
 
     deinit {
+        AuthenticationManager.shared.stopTouchIDAuth()
         AuthenticationManager.shared.stopFaceAuth()
     }
 }
