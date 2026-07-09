@@ -171,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             AppLocker.shared.bringOverlaysToFront()
             return
         } else if AppLocker.shared.currentlyBlockedApp != nil {
-            AppLocker.shared.suspendCurrentLockAuthentication()
+            AppLocker.shared.handleSwitchAway()
         }
 
         ActionAuthWindow.show(reason: "FaceGate Settings") { [weak self] in
