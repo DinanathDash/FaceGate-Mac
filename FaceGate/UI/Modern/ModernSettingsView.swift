@@ -210,8 +210,20 @@ private struct SettingsSidebarView: View {
     
     private func resetApp() {
         Task {
+            // Unregister from login items
+            try? SMAppService.mainApp.unregister()
+            
             try? FaceDataStore.shared.delete()
             let bundleId = Bundle.main.bundleIdentifier ?? "com.dweep.FaceGate"
+            
+            // Reset system permissions (Accessibility, Camera, etc)
+            let tccProcess = Process()
+            tccProcess.launchPath = "/usr/bin/tccutil"
+            tccProcess.arguments = ["reset", "All", bundleId]
+            try? tccProcess.run()
+            tccProcess.waitUntilExit()
+            
+            // Clear defaults
             let process = Process()
             process.launchPath = "/usr/bin/defaults"
             process.arguments = ["delete", bundleId]
