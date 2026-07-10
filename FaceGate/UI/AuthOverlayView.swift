@@ -48,7 +48,7 @@ struct AuthOverlayView: View {
     var body: some View {
         ZStack {
             // Dark blurred background.
-            VisualEffectBackground(material: .windowBackground, blendingMode: .behindWindow)
+            VisualEffectBackground(material: .hudWindow, blendingMode: .behindWindow)
                 .ignoresSafeArea()
 
             // Semi-transparent dark overlay removed to support light mode
@@ -97,6 +97,7 @@ struct AuthOverlayView: View {
                         .frame(width: 64, height: 64)
                         .foregroundColor(.green)
                         .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 4)
+                        .frame(width: 160, height: 160)
                 } else if authManager.isFaceUnlockAvailable && !showFallbacks && !showPasswordField && !isTimedOut && !isAuthenticatingWithTouchID {
                     faceUnlockView
                 } else {
@@ -129,6 +130,7 @@ struct AuthOverlayView: View {
                         }
                     }
                     .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 4)
+                    .frame(width: 160, height: 160)
                 }
 
                 // Gap
@@ -370,13 +372,9 @@ struct AuthOverlayView: View {
                 }
             }
         case .success:
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                Text("Authenticated!")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.green)
-            }
+            Text("Authenticated!")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.green)
         case .failed(let message):
             HStack(spacing: 8) {
                 Image(systemName: "xmark.circle.fill")

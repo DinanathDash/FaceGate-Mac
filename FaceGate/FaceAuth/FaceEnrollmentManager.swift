@@ -25,6 +25,7 @@ final class FaceEnrollmentManager: ObservableObject {
     private var collectedEmbeddings: [[Float]] = []
     private var totalQuality: Float = 0
     private var framesSinceLastCapture: Int = 0
+    private var sessionEnrolledFaceID: UUID?
 
     /// Minimum frames to skip between captures (gives user time to shift expression).
     private let captureInterval = 15
@@ -200,15 +201,33 @@ final class FaceEnrollmentManager: ObservableObject {
             do {
                 if self.isAddingFace {
                     var enrollment = self.dataStore.load() ?? FaceEnrollment(faces: [])
-                    let nextFaceNumber = enrollment.faces.count + 1
-                    let newFace = FaceEnrollment.EnrolledFace(
-                        id: UUID(),
-                        name: "Face \(nextFaceNumber)",
-                        embeddings: self.collectedEmbeddings,
-                        enrolledDate: Date(),
-                        averageQuality: averageQuality
-                    )
-                    enrollment.faces.append(newFace)
+                    
+                    if let existingID = self.sessionEnrolledFaceID,
+                       let index = enrollment.faces.firstIndex(where: { $0.id == existingID }) {
+                        // Replace the previously enrolled face in this session
+                        let updatedFace = FaceEnrollment.EnrolledFace(
+                            id: existingID,
+                            name: enrollment.faces[index].name,
+                            embeddings: self.collectedEmbeddings,
+                            enrolledDate: Date(),
+                            averageQuality: averageQuality
+                        )
+                        enrollment.faces[index] = updatedFace
+                    } else {
+                        // Brand new face for this session
+                        let newID = UUID()
+                        let nextFaceNumber = enrollment.faces.count + 1
+                        let newFace = FaceEnrollment.EnrolledFace(
+                            id: newID,
+                            name: "Face \(nextFaceNumber)",
+                            embeddings: self.collectedEmbeddings,
+                            enrolledDate: Date(),
+                            averageQuality: averageQuality
+                        )
+                        enrollment.faces.append(newFace)
+                        self.sessionEnrolledFaceID = newID
+                    }
+                    
                     try self.dataStore.save(enrollment)
                 } else {
                     let newFace = FaceEnrollment.EnrolledFace(

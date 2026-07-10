@@ -130,15 +130,25 @@ struct FaceEnrollmentView: View {
             .frame(width: 320, height: 40)
             .padding(.top, 8)
 
-            Spacer()
+            if !isInSettings {
+                Spacer()
+            } else {
+                Spacer().frame(height: 24)
+            }
 
             // Action buttons.
             actionButtons
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, isInSettings ? 32 : 0)
+        .padding(.bottom, isInSettings ? 32 : 0)
+        .frame(width: isInSettings ? 460 : nil)
+        .frame(
+            maxWidth: isInSettings ? nil : .infinity,
+            maxHeight: isInSettings ? nil : .infinity
+        )
         .onAppear {
             enrollmentManager.isAddingFace = isAddingFace
-            if FaceEnrollmentView.hasEnrolledInThisSession {
+            if FaceEnrollmentView.hasEnrolledInThisSession && !isInSettings {
                 enrollmentManager.state = .success
             } else {
                 checkCameraAndStart()

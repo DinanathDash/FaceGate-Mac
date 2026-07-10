@@ -272,6 +272,8 @@ struct SetupView: View {
 
     private var completeStep: some View {
         VStack(spacing: 20) {
+            Spacer ()
+
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 56))
                 .foregroundColor(.green)

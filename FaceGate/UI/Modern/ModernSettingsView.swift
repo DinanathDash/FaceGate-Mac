@@ -419,7 +419,15 @@ struct AuthSettingsView: View {
     @State private var isTouchIDAvailable = TouchIDAuth.shared.isAvailable
     @State private var primaryAuthOption = UserDefaults.standard.string(forKey: FGConstants.primaryAuthOptionKey) ?? "face"
     @State private var showChangePassword = false
-    @State private var showFaceEnrollment = false
+    enum ActiveSheet: Identifiable {
+        case faceEnrollment(isAddingFace: Bool)
+        var id: String {
+            switch self {
+            case .faceEnrollment(let adding): return "enroll_\(adding)"
+            }
+        }
+    }
+    @State private var activeSheet: ActiveSheet? = nil
     @State private var oldPassword = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
@@ -467,9 +475,9 @@ struct AuthSettingsView: View {
                                     }
                             } else {
                                 Button("Enroll Face") {
-                                    isAddingFace = false
-                                    showFaceEnrollment = true
-                                }
+                                isAddingFace = false
+                                activeSheet = .faceEnrollment(isAddingFace: false)
+                            }
                                 .controlSize(.small)
                             }
                         }
@@ -495,7 +503,16 @@ struct AuthSettingsView: View {
                                         }
                                     }
                                 },
-                                showFaceEnrollment: $showFaceEnrollment,
+                                showFaceEnrollment: Binding(
+                                    get: { activeSheet != nil },
+                                    set: { newValue in
+                                        if newValue {
+                                            activeSheet = .faceEnrollment(isAddingFace: isAddingFace)
+                                        } else {
+                                            activeSheet = nil
+                                        }
+                                    }
+                                ),
                                 isAddingFace: $isAddingFace
                             )
                         } else {
@@ -516,7 +533,16 @@ struct AuthSettingsView: View {
                                         }
                                     }
                                 },
-                                showFaceEnrollment: $showFaceEnrollment,
+                                showFaceEnrollment: Binding(
+                                    get: { activeSheet != nil },
+                                    set: { newValue in
+                                        if newValue {
+                                            activeSheet = .faceEnrollment(isAddingFace: isAddingFace)
+                                        } else {
+                                            activeSheet = nil
+                                        }
+                                    }
+                                ),
                                 isAddingFace: $isAddingFace
                             )
                         }
@@ -529,7 +555,7 @@ struct AuthSettingsView: View {
                             
                             Button("Re-enroll Fresh") {
                                 isAddingFace = false
-                                showFaceEnrollment = true
+                                activeSheet = .faceEnrollment(isAddingFace: false)
                             }
                             .controlSize(.small)
 
@@ -754,15 +780,18 @@ struct AuthSettingsView: View {
             refreshEnrolledFaces()
         }
         .contentMargins(.top, 8, for: .scrollContent)
-        .sheet(isPresented: $showFaceEnrollment) {
-            FaceEnrollmentView(
-                onComplete: {
-                    showFaceEnrollment = false
-                    refreshEnrolledFaces()
-                },
-                isInSettings: true,
-                isAddingFace: isAddingFace
-            )
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .faceEnrollment(let addingFace):
+                FaceEnrollmentView(
+                    onComplete: {
+                        activeSheet = nil
+                        refreshEnrolledFaces()
+                    },
+                    isInSettings: true,
+                    isAddingFace: addingFace
+                )
+            }
         }
     }
 
