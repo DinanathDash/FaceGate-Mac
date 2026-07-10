@@ -28,31 +28,34 @@ struct SetupView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectBackground(material: .windowBackground, blendingMode: .behindWindow)
+            VisualEffectBackground(material: .underWindowBackground, blendingMode: .behindWindow)
                 .ignoresSafeArea()
                 
-            VStack(spacing: 0) {
-                // Step content.
-                Group {
-                    switch currentStep {
-                    case .welcome:
-                        welcomeStep
-                    case .permissions:
-                        permissionsStep
-                    case .faceEnrollment:
-                        faceEnrollmentStep
-                    case .setPassword:
-                        passwordStep
-                    case .selectApps:
-                        selectAppsStep
-                    case .complete:
-                        completeStep
-                    }
+            // Step content.
+            Group {
+                switch currentStep {
+                case .welcome:
+                    welcomeStep
+                case .permissions:
+                    permissionsStep
+                case .faceEnrollment:
+                    faceEnrollmentStep
+                case .setPassword:
+                    passwordStep
+                case .selectApps:
+                    selectAppsStep
+                case .complete:
+                    completeStep
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .animation(.easeInOut(duration: 0.3), value: currentStep)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, 30)
+            .padding(.bottom, 52)
+            .animation(.easeInOut(duration: 0.3), value: currentStep)
 
-                // Progress indicator.
+            // Progress indicator.
+            VStack {
+                Spacer()
                 HStack(spacing: 8) {
                     ForEach(SetupStep.allCases, id: \.rawValue) { step in
                         Circle()
@@ -65,28 +68,20 @@ struct SetupView: View {
                 .padding(.bottom, 24)
             }
         }
-        .frame(width: 500, height: 560)
+        .ignoresSafeArea(.all)
+        .frame(width: 500, height: 580)
     }
 
     // MARK: - Steps
 
     private var welcomeStep: some View {
-        VStack(spacing: 20) {
-            Spacer()
-
-            if let appIcon = NSApp.applicationIconImage {
-                Image(nsImage: appIcon)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 64, height: 64)
-            } else {
-                Image(systemName: "app.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 64, height: 64)
-                    .foregroundColor(.secondary)
-            }
-
+        VStack(spacing: 16) {
+            Image("WelcomeHeader")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 440, height: 220)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            
             VStack(spacing: 8) {
                 Text("Welcome to FaceGate")
                     .font(.largeTitle.bold())
@@ -102,63 +97,77 @@ struct SetupView: View {
                 FeatureRow(icon: "key.fill", color: .orange, title: "App Password", subtitle: "Set a custom password for emergency access")
             }
             .padding(.horizontal, 40)
-            .padding(.top, 8)
+            .padding(.top, 4)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             setupButton("Get Started") {
                 currentStep = .permissions
             }
-            .padding(.bottom, 16)
         }
-        .padding(.top, 30)
     }
 
     private var permissionsStep: some View {
-        VStack(spacing: 20) {
-            Spacer()
-
-            Text("Permissions")
-                .font(.title.bold())
-
-            Text("FaceGate needs these permissions to protect your apps.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 360)
-
-            VStack(spacing: 16) {
-                PermissionRow(
-                    icon: "hand.raised.fill",
-                    title: "Accessibility",
-                    description: "Required to monitor and block app launches",
-                    isGranted: accessibilityGranted,
-                    action: openAccessibilitySettings
-                )
-
-                PermissionRow(
-                    icon: "camera.fill",
-                    title: "Camera",
-                    description: "Required for Face Unlock (granted on first use)",
-                    isGranted: nil,
-                    action: nil
-                )
+        VStack(spacing: 16) {
+            ZStack {
+                Image("PermissionsBackground")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 440, height: 220)
+                    .scaleEffect(1.2)
+                
+                Image("SettingsWindow")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 380)
+                    .scaleEffect(1.4)
+                    .offset(y: 100)
             }
-            .padding(.horizontal, 40)
+            .frame(width: 440, height: 220)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            
+            VStack(spacing: 16) {
+                Text("Permissions")
+                    .font(.title.bold())
 
-            Spacer()
+                Text("FaceGate needs these permissions to protect your apps.")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
 
-            HStack(spacing: 12) {
-                Button("Back") { currentStep = .welcome }
-                    .controlSize(.large)
+                VStack(spacing: 16) {
+                    PermissionRow(
+                        icon: "hand.raised.fill",
+                        title: "Accessibility",
+                        description: "Required to monitor and block app launches",
+                        isGranted: accessibilityGranted,
+                        action: openAccessibilitySettings
+                    )
 
-                setupButton("Continue") {
-                    currentStep = .faceEnrollment
+                    PermissionRow(
+                        icon: "camera.fill",
+                        title: "Camera",
+                        description: "Required for Face Unlock (granted on first use)",
+                        isGranted: nil,
+                        action: nil
+                    )
+                }
+                .padding(.horizontal, 40)
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 12) {
+                    Button("Back") { currentStep = .welcome }
+                        .controlSize(.large)
+                        .frame(minWidth: 120)
+                        
+                    setupButton("Continue") {
+                        currentStep = .faceEnrollment
+                    }
                 }
             }
-            .padding(.bottom, 16)
         }
-        .padding(.top, 30)
         .onAppear {
             checkAccessibility()
         }
@@ -180,18 +189,18 @@ struct SetupView: View {
                 onComplete: {
                     currentStep = .setPassword
                 },
+                onBack: {
+                    currentStep = .permissions
+                },
                 isInSettings: false
             )
         }
-        .padding(.top, 10)
-        .padding(.bottom, 10)
     }
 
     private var passwordStep: some View {
-        VStack(spacing: 20) {
-
+        VStack(spacing: 12) {
             Image(systemName: "key.fill")
-                .font(.system(size: 36))
+                .font(.system(size: 32))
                 .foregroundColor(.orange)
 
             Text("Set App Password")
@@ -201,9 +210,10 @@ struct SetupView: View {
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 360)
 
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 PasswordField(placeholder: "Choose a password", text: $password, isSecure: $isPasswordSecure)
                     .frame(maxWidth: 300)
                 PasswordField(placeholder: "Confirm password", text: $confirmPassword, isSecure: $isPasswordSecure)
@@ -219,26 +229,24 @@ struct SetupView: View {
                 }
             }
             
-            // Reduced space between form and buttons by omitting Spacer()
+            Spacer(minLength: 0)
 
             HStack(spacing: 12) {
                 Button("Back") { currentStep = .faceEnrollment }
                     .controlSize(.large)
+                    .frame(minWidth: 120)
 
                 setupButton("Set Password") {
                     savePassword()
                 }
             }
-            .padding(.bottom, 16)
         }
-        .padding(.top, 30)
     }
 
     private var selectAppsStep: some View {
         VStack(spacing: 12) {
             Text("Select Apps to Lock")
                 .font(.title.bold())
-                .padding(.top, 20)
 
             Text("Choose which apps require authentication to open.")
                 .font(.body)
@@ -248,25 +256,22 @@ struct SetupView: View {
                 .frame(maxHeight: .infinity)
                 .padding(.horizontal, 40)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             HStack(spacing: 12) {
                 Button("Back") { currentStep = .setPassword }
                     .controlSize(.large)
+                    .frame(minWidth: 120)
 
                 setupButton("Finish Setup") {
                     currentStep = .complete
                 }
             }
-            .padding(.bottom, 16)
         }
-        .padding(.top, 20)
     }
 
     private var completeStep: some View {
         VStack(spacing: 20) {
-            Spacer()
-
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 56))
                 .foregroundColor(.green)
@@ -311,14 +316,13 @@ struct SetupView: View {
                     .fill(Color.secondary.opacity(0.15))
             )
 
-            Spacer()
+            Spacer(minLength: 0)
 
             VStack(spacing: 12) {
                 setupButton("Start Protecting") {
                     finalizeSetup()
                     onSetupComplete()
                 }
-
                 Button("Configure Settings") {
                     finalizeSetup()
                     onOpenSettings?()
@@ -326,9 +330,7 @@ struct SetupView: View {
                 .buttonStyle(.link)
                 .font(.body)
             }
-            .padding(.bottom, 16)
         }
-        .padding(.top, 30)
     }
 
     // MARK: - Helpers

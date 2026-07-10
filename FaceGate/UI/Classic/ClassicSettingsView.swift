@@ -207,7 +207,7 @@ private struct CodexSettingsSidebar: View {
     private func resetApp() {
         Task {
             // Unregister from login items
-            try? SMAppService.mainApp.unregister()
+            try? await SMAppService.mainApp.unregister()
             
             try? FaceDataStore.shared.delete()
             let bundleId = Bundle.main.bundleIdentifier ?? "com.dweep.FaceGate"

@@ -40,7 +40,8 @@ final class KeychainHelper {
     /// Read data from the Keychain.
     /// - Parameter account: The account key to look up.
     /// - Returns: The stored data, or `nil` if not found.
-    func read(for account: String) -> Data? {
+    /// - Throws: `KeychainError` if the operation fails due to user denial or other errors.
+    func read(for account: String) throws -> Data? {
         var query = baseQuery(for: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -48,7 +49,12 @@ final class KeychainHelper {
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-        guard status == errSecSuccess else { return nil }
+        guard status == errSecSuccess else {
+            if status == errSecItemNotFound {
+                return nil
+            }
+            throw KeychainError.unableToSave(status: status) // Re-using unableToSave for simplicity, or we can use a custom error
+        }
         return result as? Data
     }
 
@@ -63,7 +69,7 @@ final class KeychainHelper {
     /// - Parameter account: The account key to check.
     /// - Returns: `true` if the entry exists.
     func exists(for account: String) -> Bool {
-        return read(for: account) != nil
+        return (try? read(for: account)) != nil
     }
 
     // MARK: - Convenience (String)
@@ -78,7 +84,7 @@ final class KeychainHelper {
 
     /// Read a string from the Keychain.
     func readString(for account: String) -> String? {
-        guard let data = read(for: account) else { return nil }
+        guard let data = try? read(for: account) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 

@@ -13,7 +13,7 @@ final class CryptoHelper {
     /// Retrieve the encryption key from Keychain, or generate and store a new one.
     /// - Returns: A 256-bit symmetric key for AES-GCM.
     func getOrCreateKey() throws -> SymmetricKey {
-        if let existingKeyData = KeychainHelper.shared.read(for: FGConstants.keychainFaceDataKeyAccount) {
+        if let existingKeyData = try KeychainHelper.shared.read(for: FGConstants.keychainFaceDataKeyAccount) {
             return SymmetricKey(data: existingKeyData)
         }
 

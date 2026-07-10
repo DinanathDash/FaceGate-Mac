@@ -69,7 +69,6 @@ final class FaceEnrollmentManager: ObservableObject {
 
     /// Start the enrollment process: activate camera and begin capturing face frames.
     func startEnrollment() {
-        guard state != .success else { return }
         collectedEmbeddings = []
         totalQuality = 0
         capturedCount = 0
@@ -196,40 +195,42 @@ final class FaceEnrollmentManager: ObservableObject {
 
         let averageQuality = totalQuality / Float(collectedEmbeddings.count)
 
-        do {
-            if isAddingFace {
-                var enrollment = dataStore.load() ?? FaceEnrollment(faces: [])
-                let nextFaceNumber = enrollment.faces.count + 1
-                let newFace = FaceEnrollment.EnrolledFace(
-                    id: UUID(),
-                    name: "Face \(nextFaceNumber)",
-                    embeddings: collectedEmbeddings,
-                    enrolledDate: Date(),
-                    averageQuality: averageQuality
-                )
-                enrollment.faces.append(newFace)
-                try dataStore.save(enrollment)
-            } else {
-                let newFace = FaceEnrollment.EnrolledFace(
-                    id: UUID(),
-                    name: "Face 1",
-                    embeddings: collectedEmbeddings,
-                    enrolledDate: Date(),
-                    averageQuality: averageQuality
-                )
-                let enrollment = FaceEnrollment(faces: [newFace])
-                try dataStore.save(enrollment)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
+            do {
+                if self.isAddingFace {
+                    var enrollment = self.dataStore.load() ?? FaceEnrollment(faces: [])
+                    let nextFaceNumber = enrollment.faces.count + 1
+                    let newFace = FaceEnrollment.EnrolledFace(
+                        id: UUID(),
+                        name: "Face \(nextFaceNumber)",
+                        embeddings: self.collectedEmbeddings,
+                        enrolledDate: Date(),
+                        averageQuality: averageQuality
+                    )
+                    enrollment.faces.append(newFace)
+                    try self.dataStore.save(enrollment)
+                } else {
+                    let newFace = FaceEnrollment.EnrolledFace(
+                        id: UUID(),
+                        name: "Face 1",
+                        embeddings: self.collectedEmbeddings,
+                        enrolledDate: Date(),
+                        averageQuality: averageQuality
+                    )
+                    let enrollment = FaceEnrollment(faces: [newFace])
+                    try self.dataStore.save(enrollment)
+                }
+
+                UserDefaults.standard.set(true, forKey: FGConstants.faceEnrolledKey)
+                UserDefaults.standard.set(true, forKey: FGConstants.faceUnlockEnabledKey)
+
+                self.state = .success
+                self.statusMessage = "Face enrolled successfully!"
+            } catch {
+                self.state = .failed("Failed to save: \(error.localizedDescription)")
+                self.statusMessage = "Enrollment failed"
             }
-
-            // Enable face unlock by default after successful enrollment.
-            UserDefaults.standard.set(true, forKey: FGConstants.faceEnrolledKey)
-            UserDefaults.standard.set(true, forKey: FGConstants.faceUnlockEnabledKey)
-
-            state = .success
-            statusMessage = "Face enrolled successfully!"
-        } catch {
-            state = .failed("Failed to save: \(error.localizedDescription)")
-            statusMessage = "Enrollment failed"
         }
     }
 }

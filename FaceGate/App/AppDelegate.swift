@@ -233,7 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         )
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 580),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -244,8 +244,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.titlebarSeparatorStyle = .none
         window.isMovableByWindowBackground = false
         window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isOpaque = false
         window.backgroundColor = .clear
+        
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
         window.contentView = NSHostingView(rootView: setupView)
         if let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main {
             let x = screen.frame.origin.x + (screen.frame.width - window.frame.width) / 2

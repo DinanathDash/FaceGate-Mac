@@ -35,8 +35,8 @@ final class PasswordAuth {
     /// - Parameter password: The plaintext password to verify.
     /// - Returns: `true` if the password matches.
     func verifyPassword(_ password: String) -> Bool {
-        guard let storedHash = keychain.read(for: FGConstants.keychainPasswordAccount),
-              let storedSalt = keychain.read(for: FGConstants.keychainSaltAccount) else {
+        guard let storedHash = try? keychain.read(for: FGConstants.keychainPasswordAccount),
+              let storedSalt = try? keychain.read(for: FGConstants.keychainSaltAccount) else {
             return false
         }
 
