@@ -57,12 +57,13 @@ dmg: export
 	create-dmg \
 		--volname "$(APP_NAME)" \
 		--background "non-app-assets/dmg_background.png" \
-		--window-pos 200 120 \
-		--window-size 660 400 \
-		--icon-size 100 \
-		--icon "$(APP_NAME).app" 180 210 \
+		--window-pos 450 120 \
+		--window-size 500 728 \
+		--icon-size 110 \
+		--icon "$(APP_NAME).app" 250 160 \
 		--hide-extension "$(APP_NAME).app" \
-		--app-drop-link 480 210 \
+		--app-drop-link 250 548 \
+		--icon ".background" 600 150 \
 		"$(DMG_PATH)" \
 		"$(BUILD_DIR)/dmg_staging/"
 	@rm -rf $(BUILD_DIR)/dmg_staging
